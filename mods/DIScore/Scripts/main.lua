@@ -7,22 +7,27 @@
 -- we do not need to detect gameplay ourselves - we read the counters the server
 -- already maintains and multiply them by the MP table.
 --
--- Two independent sources, deliberately both:
+-- SETTLED BY THE 2026-09-01 LIVE RUN (LVL_FragrantShore, 1 human + 7 bots):
 --
---   HOOK    ADeceiveIncGameStateBase:HandleXPEvent(PlayerState, EventType, Amount)
---           is the funnel every scoring event passes through. Counting fires
---           ourselves is uncapped and timestamped.
+--   POLL works and is authoritative. ADIPlayerState.XpData.PlayerXpEventInfo
+--   is a fully populated array of {EventType, MaxTrigger, TriggerAmount}, for
+--   bots as well as humans, and CanGiveXpEvent() returns true on the dedicated
+--   server. Crucially every MaxTrigger in the scored set matches the intended
+--   cap exactly - Kill/VaultComputer/ReticalScanner are INT_MAX, and
+--   EnterVault/FirstObjectivePickup/PickupObjective are 1 - so the clamping
+--   worry does not exist and a plain read is the whole feature.
 --
---   POLL    ADIPlayerState.XpData.PlayerXpEventInfo is the server's own running
---           tally: an array of {EventType, MaxTrigger, TriggerAmount}. Free to
---           read, but MaxTrigger may clamp it.
+--   HOOK does not work and is not needed. RegisterHook on HandleXPEvent
+--   reports registered=true but never fires, because UE4SS intercepts
+--   ProcessEvent and this is a native C++ call that never goes through it.
+--   Same for HandleVaultTerminalDeactivation. Both hooks are left in place:
+--   they cost nothing, and they would start reporting if the game ever routed
+--   these through the reflected path.
 --
--- Recon phase compares the two. If they agree, either is usable and the poll is
--- the cheaper long-term answer. If the hook counts higher, MaxTrigger clamping
--- is real and the hook is the only correct source. If neither produces
--- anything, CanGiveXpEvent() is gating XP on a self-hosted server and scoring
--- has to be rebuilt on the gameplay events instead (OnVaultTerminalDeactivation,
--- OnObjectiveCarrierChanged, the death pipeline) - see docs.
+-- The consequence for the fallback plan is worth recording: if XP had been
+-- gated off, the gameplay-event route would have hit this same wall, since
+-- those are native calls too. It would need the Stage 3 native invoker rather
+-- than Lua hooks.
 --
 -- Read-only. No property is written and no function with side effects is
 -- called, so none of the crash modes in docs/05-findings.md apply.
@@ -123,9 +128,26 @@ end
 -- ------------------------------------------------------- player identity
 --
 -- Bots in Deceive Inc. are full bot players with their own controllers and
--- PlayerStates, so a name check alone cannot tell them apart. The decisive test
--- is APlayerController.NetConnection: a human's is non-nil, a bot's is not.
--- ASpy.bIsBot and PlayerState.bIsABot corroborate.
+-- PlayerStates, so a name check alone cannot tell them apart - and the bots use
+-- real agent names ("Ace", "Larcin", "Madame Xiu"), so it is not even a weak
+-- signal.
+--
+-- The prior plan was to treat APlayerController.NetConnection as decisive:
+-- non-nil for a human, nil for a bot. Measured 2026-09-01 that is WRONG as
+-- written, because UE4SS hands back a wrapper object for a null UObject pointer
+-- rather than nil, so `connection ~= nil` was true for all 8 players and
+-- mislabelled 7 bots as human. NetConnection must be IsValid()-checked, and
+-- even then it is only corroboration here: bIsABot and ASpy.bIsBot both agreed
+-- with ground truth on every player in that match, so they lead.
+
+local function object_valid(object)
+    if object == nil then return false end
+    local valid
+    if pcall(function() valid = object:IsValid() end) and valid ~= nil then
+        return valid and true or false
+    end
+    return false
+end
 
 local function identify(player_state)
     local name = to_string_prop(player_state and player_state.PlayerDisplayName)
@@ -145,7 +167,7 @@ local function identify(player_state)
 
     local spy
     pcall(function() spy = unwrap(player_state.OwnedSpy) end)
-    if spy ~= nil then
+    if object_valid(spy) then
         local spy_flag
         pcall(function() spy_flag = spy.bIsBot end)
         if spy_flag ~= nil then
@@ -154,16 +176,19 @@ local function identify(player_state)
         end
     end
 
-    -- Strongest signal, so it wins over the flags above if they disagree.
+    -- Corroboration only. Recorded so a future disagreement is visible in the
+    -- log, but never allowed to override the flags above.
     local controller
     pcall(function() controller = unwrap(player_state:GetOwner()) end)
-    if controller ~= nil then
-        local connection, read_ok
-        read_ok = pcall(function() connection = unwrap(controller.NetConnection) end)
-        if read_ok then
-            local has_connection = connection ~= nil
-            evidence[#evidence + 1] = "NetConnection=" .. tostring(has_connection)
+    if object_valid(controller) then
+        local connection
+        pcall(function() connection = unwrap(controller.NetConnection) end)
+        local has_connection = object_valid(connection)
+        evidence[#evidence + 1] = "NetConnection=" .. tostring(has_connection)
+        if is_bot == nil then
             is_bot = not has_connection
+        elseif is_bot == has_connection then
+            evidence[#evidence + 1] = "DISAGREE"
         end
     end
 
@@ -370,12 +395,13 @@ local function report(reason)
                 end
             end
 
-            -- Score off the hook when it saw anything (uncapped), else the poll.
-            local source = "poll"
-            local counts = poll_counts
-            if hook_row ~= nil then source = "hook"; counts = hook_counts end
-            local lines, total = score_from_counts(counts, won == true)
-            append("      -- score (" .. source .. ") --")
+            -- The poll is authoritative. Measured 2026-09-01: every MaxTrigger
+            -- in the scored set matches the intended cap exactly (Kill,
+            -- VaultComputer and ReticalScanner are INT_MAX; EnterVault,
+            -- FirstObjectivePickup and PickupObjective are 1), so there is no
+            -- clamping to work around and nothing to gain from the hook.
+            local lines, total = score_from_counts(poll_counts, won == true)
+            append("      -- score (poll) --")
             if #lines == 0 then
                 append("      (nothing scored)")
             else
@@ -447,24 +473,41 @@ register("/Script/Engine.GameModeBase:StartPlay", function()
     append("==== StartPlay: tally cleared ====")
 end)
 
--- End-of-match auto-report. MatchResultsPosted is the moment the server has
--- finished writing results, which is exactly when the client builds its
--- Mission Report - so our numbers should line up with what players see.
-register("/Script/DeceiveInc.DeceiveIncGameStateBase:MatchResultsPosted", function()
-    ExecuteWithDelay(500, function() pcall(report, "MatchResultsPosted") end)
-end)
-
 -- ------------------------------------------------------------- triggering
+--
+-- End-of-match auto-report. RegisterHook on MatchResultsPosted was tried first
+-- and refused to register (returned a bare function instead of hook ids,
+-- measured 2026-09-01) - it is a delegate signature, not a callable UFunction
+-- on the class. Watching the replicated phase is both simpler and independent
+-- of that distinction.
 
--- On-demand mid-match snapshot, so a report can be taken without waiting for
--- the match to end.
+local RESULT_SCREEN = 7   -- ESpyGamePhase
+local reported_phase = nil
+
 LoopAsync(2000, function()
+    -- Manual mid-match snapshot.
     local marker = io.open(TRIGGER, "r")
     if marker ~= nil then
         marker:close()
         os.remove(TRIGGER)
         pcall(report, "manual-trigger")
     end
+
+    -- Auto-report once, when the match reaches the result screen.
+    local ok = pcall(function()
+        local gs = game_state()
+        if gs == nil then return end
+        local phase = to_number(gs.GamePhase)
+        if phase == nil then return end
+        if phase < RESULT_SCREEN then
+            reported_phase = nil          -- re-arm for the next match
+        elseif reported_phase == nil then
+            reported_phase = phase
+            pcall(report, "phase=" .. tostring(phase) .. " (result screen)")
+        end
+    end)
+    if not ok then append("phase watcher error") end
+
     return false
 end)
 

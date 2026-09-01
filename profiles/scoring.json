@@ -1,8 +1,8 @@
 {
   "description": "Ranked MP scoring recon. Hooks HandleXPEvent + polls XpData; auto-reports at match end to DIScore.log. Read-only.",
   "mods": {
-    "DIScore": true,
-    "DIConfig": true
+    "DIConfig": true,
+    "DIScore": true
   },
   "diconfig": {
     "Timing": {

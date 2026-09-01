@@ -38,60 +38,75 @@ Win is not an XP event — it is the replicated `bWon` bool on the player state,
 corroborated by `EMatchResult` on the game state
 (`MissionSucess_ObjectiveExtracted` = 1, `MissionSucess_LastManStanding` = 2).
 
-## Two sources, deliberately both
+## Verified live, 2026-09-01
 
-`DIScore` reads the same numbers two independent ways and prints a `DIVERGE`
-line wherever they disagree.
+One match on `LVL_FragrantShore`, 1 human ("Ihelane") + 7 bots, reported at
+`GamePhase=3` (VAULT_LOCKED).
 
-**HOOK** — `ADeceiveIncGameStateBase:HandleXPEvent(DIPlayerState*, DIXPEvent, int32)`
-is the single funnel every scoring event passes through. Counting fires
-ourselves is uncapped and timestamped.
+**The poll works and is authoritative.** `XpData.PlayerXpEventInfo` came back
+fully populated for all 8 player states — Ihelane read `Intel=22`,
+`DoorUnlock=18`, `Kill=2`, `Keycard_Purple=1` — and scored 4 MP off two
+eliminations. `CanGiveXpEvent()` returned **true**, so the gate that could have
+sunk this approach is open on a self-hosted server.
 
-**POLL** — `ADIPlayerState.XpData.PlayerXpEventInfo` is the server's own running
-tally, an array of `{EventType, MaxTrigger, TriggerAmount}`. Free to read at any
-time, but `MaxTrigger` (from `FXpEventInfo.MaxEventTrigger` in
-`UDIXpEventDataAsset.XpEventsMap`) may clamp it.
+**`MaxTrigger` is a non-issue, and confirms the point spec.** The caps the
+server itself carries match the intended semantics exactly:
 
-If the two agree, the poll is the cheaper long-term answer and no hook is
-needed. If the hook counts higher, clamping is real and the hook is the only
-correct source.
+| Event | `MaxTrigger` | Intended |
+|---|---|---|
+| `Kill` | 2147483647 | uncapped |
+| `VaultComputer` | 2147483647 | uncapped |
+| `ReticalScanner` | 2147483647 | uncapped |
+| `EnterVault` | 1 | once |
+| `FirstObjectivePickup` | 1 | once |
+| `PickupObjective` | 1 | once |
 
-## What the recon run must establish
+Nothing can be clamped away, so a plain read is the entire feature.
 
-1. **`CanGiveXpEvent()`** — a gate on the game state. If it returns false on a
-   self-hosted server, `HandleXPEvent` most likely early-outs and *both* tallies
-   stay empty. This is the one finding that could invalidate the whole approach.
-2. **`MaxTrigger` clamping** — whether poll and hook diverge.
-3. **Bots** — Deceive Inc. bots are full bot players with their own controllers
-   and `DIPlayerState`s, so they appear in the player array. Whether the XP path
-   runs for them is unverified; it may be skipped as an optimisation.
+**Bots are scored the same as humans.** Bot player states carry populated
+`XpData` (a bot read `Intel=1`), so no special handling is needed.
 
-`DIScore` logs all three explicitly.
+**The hook does not work, and is not needed.** `RegisterHook` on
+`HandleXPEvent` reported `registered=true` but never fired once, while the poll
+showed `Kill=2` — UE4SS intercepts `ProcessEvent`, and this is a native C++
+call that never passes through it. `HandleVaultTerminalDeactivation` likewise
+never fired. Both hooks are left in place at zero cost.
 
-## Fallback if XP is gated off
+This retires the fallback plan as written: the gameplay-event route relies on
+the same native functions and would hit the identical wall. It would need the
+Stage 3 native invoker, not Lua hooks. Since the XP gate is open, that is moot.
 
-Score from the gameplay events instead of the XP layer. Every category has a
-non-XP source:
+**Two bugs found and fixed:**
 
-| Rule | Non-XP source |
-|---|---|
-| Vault terminal | `HandleVaultTerminalDeactivation(DIPlayerState*)`, `OnVaultTerminalDeactivation`, `IncrementVaultDeactivationCount` |
-| Briefcase / case held | `ObjectiveCarrier` + `OnObjectiveCarrierChanged(ASpy*)` |
-| Extraction | `OnSpyExtractingChange(AExtractionInteractableActor*, ASpy*, bool)` |
-| Retinal scanner / terminals | `EInteractableType::RetinalScanner` = 40, `VaultTerminal` = 15, via `InteractionAuthorityComponent` |
-| Kills | the damage/death pipeline |
-| Win | `bWon` / `EMatchResult` (already non-XP) |
+- `RegisterHook` on `MatchResultsPosted` refused to register (returned a bare
+  function instead of hook ids) — it is a delegate signature, not a callable
+  UFunction. Replaced with a `GamePhase == 7` (RESULT_SCREEN) watcher in the
+  existing 2s poll loop, which re-arms itself for the next match.
+- Bot detection mislabelled all 7 bots as human. `APlayerController.NetConnection`
+  is **not** usable as `~= nil`: UE4SS returns a wrapper object for a null
+  UObject pointer, so the test was true for everyone. It needs an `IsValid()`
+  check. `bIsABot` and `ASpy.bIsBot` agreed with ground truth on all 8 players,
+  so they now lead and NetConnection is corroboration only, logged as
+  `DISAGREE` if it ever contradicts them.
 
-More wiring, but independent of the XP gate and guaranteed to cover bots.
-`DIScore` already hooks `HandleVaultTerminalDeactivation` so the recon run
-proves out this route at the same time.
+**Still unverified:** every objective counter except `Kill` read zero, because
+the match had not reached those phases. `EnterVault`, `FirstObjectivePickup`,
+`PickupObjective`, `VaultComputer` and `ReticalScanner` are structurally
+present and correctly capped, but have not yet been observed non-zero. `bWon`
+was `false` for all players, so the +7 win rule is also untested. A match played
+through to the result screen closes both.
 
 ## Bot vs human
 
-A name check is not enough. The decisive test is
-`APlayerController.NetConnection` — non-nil for a human, nil for a bot —
-corroborated by `ASpy.bIsBot` and engine `PlayerState.bIsABot`. `DIScore`
-records all three and prints its reasoning per player.
+A name check is not enough — the bots use real agent names ("Ace", "Larcin",
+"Madame Xiu"), so it is not even a weak signal.
+
+`PlayerState.bIsABot` and `ASpy.bIsBot` lead: they agreed with ground truth on
+all 8 players in the live run. `APlayerController.NetConnection` is recorded as
+corroboration but **must** be `IsValid()`-checked rather than compared against
+nil — UE4SS returns a wrapper for a null UObject pointer, which is what
+mislabelled every bot as human on the first run. `DIScore` prints all three per
+player and flags `DISAGREE` if NetConnection ever contradicts the flags.
 
 ## Usage
 
@@ -99,8 +114,8 @@ records all three and prints its reasoning per player.
 python dimod.py restart scoring
 ```
 
-Play a match. At `MatchResultsPosted` the report writes itself to
-`Win64/DIScore.log`. For a mid-match snapshot:
+Play a match. The report writes itself to `Win64/DIScore.log` when the match
+reaches the result screen (`GamePhase == 7`). For a mid-match snapshot:
 
 ```bash
 python dimod.py score-report
