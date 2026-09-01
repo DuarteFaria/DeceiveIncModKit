@@ -385,13 +385,16 @@ local function report(reason)
                 end
             end
 
-            -- Disagreement between the two is the finding, so state it plainly
-            -- rather than leaving it to be eyeballed across two blocks.
-            for id in pairs(MP) do
-                local p, h = poll_counts[id] or 0, hook_counts[id] or 0
-                if p ~= h then
-                    append(string.format("      DIVERGE  %-22s poll=%d hook=%d",
-                           event_name(id), p, h))
+            -- Only meaningful while the hook is actually delivering. It is not
+            -- (native call, see the header), so gating on hook_fires keeps this
+            -- from printing "poll=N hook=0" against every scored event forever.
+            if hook_fires > 0 then
+                for id in pairs(MP) do
+                    local p, h = poll_counts[id] or 0, hook_counts[id] or 0
+                    if p ~= h then
+                        append(string.format("      DIVERGE  %-22s poll=%d hook=%d",
+                               event_name(id), p, h))
+                    end
                 end
             end
 
