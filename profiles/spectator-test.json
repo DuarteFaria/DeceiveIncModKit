@@ -1,0 +1,19 @@
+{
+  "description": "Legacy spectator-join probe: 8 player slots and MaxSpectators=4. No direct join path was found.",
+  "mods": {
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 30,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "MaxPlayers": "8",
+    "bIsPublic": "False"
+  }
+}

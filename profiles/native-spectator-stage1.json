@@ -1,0 +1,26 @@
+{
+  "description": "EXPERIMENTAL SERVER-ONLY Stage 1 diagnostics; observes exit/lifecycle events and never suppresses exits.",
+  "mods": {
+    "DIConfig": true,
+    "DINativeLifecycle": true
+  },
+  "native_modules": [
+    "DINativeSpectatorStage1"
+  ],
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False",
+    "AutoShutdownEmptyMinutes": "60"
+  }
+}

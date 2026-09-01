@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Duarte\DeceiveIncModKit\native\DINativeSpectator\build\vs2022-x64\CMakeFiles\1f33ae9115d81ba4bdd39fa23573fa87\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{8086C158-58FE-32B5-BA3A-C5F3AA5027B0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

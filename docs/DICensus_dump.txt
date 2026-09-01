@@ -1,0 +1,2820 @@
+
+################ DICensus t+45s ################
+objects walked: 158743   game-owned instances: 26323
+
+---- class tally (684 distinct) ----
+    24  ABP_Amber_GuardBehavior_C
+     1  ABP_BaseGuard_C
+     1  ABP_BaseSpyMelee_1P_C
+     2  ABP_BaseSpyMelee_3P_C
+     2  ABP_BaseSpy_1P_C
+     2  ABP_BaseSpy_3P_C
+     8  ABP_EliteAmber_GuardBehavior_C
+   265  ABP_GuardBehavior_C
+    24  ABP_GuardBehavior_Douglas_C
+    10  ABP_GuardBehavior_EliteDouglas_C
+     1  ABP_HealthConsumable_1P_C
+     1  ABP_NPC_C
+     1  ABP_PosingSpy_C
+     1  ABP_PosingSpy_Weapon_Xiu_Mod2_3p_C
+     2  ABP_SpyHandTool_Weapon_HitscanBase_3P_C
+     2  ABP_SpyHandTool_Weapon_HitscanBase_C
+     1  ABP_Spy_BounceMatTool3P_C
+     1  ABP_Spy_BounceMatTool_C
+     1  ABP_Spy_CallingCardTool_3P_C
+     1  ABP_Spy_CallingCardTool_C
+     1  ABP_Spy_Poudrier3P_C
+     1  ABP_Spy_Poudrier_C
+     1  ABP_Spy_ScramblerTool3P_C
+     1  ABP_Spy_ScramblerTool_C
+     2  ABP_WeaponSquire_3P_C
+     2  ABP_WeaponSquire_C
+     1  AISenseConfig_Damage
+     1  AISenseEvent_Damage
+     1  AISense_Damage
+     1  ALI_Guard_C
+     1  ALI_SpyActiveAbility_C
+     1  ALI_SpyCustomSkin_C
+     1  ALI_SpyHandTool_C
+     1  ALI_SpyMeleeAttack_C
+     1  AOEWeaponComponent
+     1  ARSharedWorldGameMode
+     1  ARSharedWorldGameState
+     1  ARTextureCameraDepth
+     1  ARTextureCameraImage
+     1  AYumiPassiveAbilityMod1_2
+     1  AceActiveAbility
+     1  AceActiveAbilityHeatVision
+     1  AceActiveAbilityMod2
+     1  AcePassiveAbility
+     1  AceTrailActiveAbility
+  2461  ActiveAbilityConditionComponent
+    14  AgentData
+    37  AgentExpertiseSkillData
+   177  AgentIntroPoseDataAsset
+    37  AgentPassiveSkillData
+   769  AgentSkinData
+    37  AgentWeaponData
+   218  AnimNotify_FootstepsEvent_NPC_C
+     5  AnimNotify_GuardSetWeaponVisibility_C
+    22  AnimNotify_NPCDespawnProp_C
+    23  AnimNotify_NPCSpawnProp_C
+     3  AnimNotify_SpyDespawnProp_C
+     3  AnimNotify_SpySpawnProp_C
+     3  AttachToSpyComponent
+     1  BPFunctionLibrary_Gadgets_C
+     1  BPFunctionLibrary_SpyShared_Balancing_C
+     1  BPI_DamageNumbers_C
+     1  BPI_Interactables_C
+     1  BPI_NPC_C
+     1  BPI_ObjectiveTerminal_C
+     1  BPI_SpyBase_C
+     1  BPL_Interactables_C
+     1  BPLibrary_GadgetTeamOverlay_C
+     1  BPLibrary_VFX_Weapon_C
+     1  BPPosingSpy_Base_C
+     1  BPSpy_Base_C
+     1  BPWeapon_HitscanBase_C
+     2  BPWeapon_Squire_C
+     1  BP_BaseDoorActor_C
+     1  BP_BaseGuard_C
+     1  BP_BaseInteractable_C
+     1  BP_BaseNPC_C
+     1  BP_BasePowerupChest_C
+     1  BP_BasePowerup_C
+     2  BP_CameraLense_C
+     2  BP_CameraOutro_Lose_C
+    12  BP_CivilianObservation_Interactable_C
+     1  BP_Container_OrangeCardSpawnerHS_C
+     3  BP_Container_PurpleCardSpawnerHS_C
+     1  BP_Container_PurpleCardSpawnerSE_C
+     2  BP_DamageModifier_DisguiseShield_Disguise_C
+     2  BP_DamageModifier_DisguiseShield_Spy_C
+     1  BP_DamageType_Fall_C
+     2  BP_DeceiveIncBaseGameMode_C
+     1  BP_DeceiveIncBotController_C
+     1  BP_DeceiveIncCheatManager_C
+     2  BP_DeceiveIncMatchGameState_C
+     2  BP_DeceiveIncPlayer_C
+     1  BP_DeceiveIncPregameLobbyState_C
+     1  BP_DeceiveIncSpyGameState_C
+     1  BP_DedicatedGameState_C
+     1  BP_DestroyedGadget_Bouncemat_C
+     1  BP_DestroyedGadget_Scrambler_C
+     1  BP_Display_Powerup_Civilian_C
+     1  BP_Display_Powerup_Guard_C
+     1  BP_Display_Powerup_Staff_C
+     1  BP_Display_Powerup_Technician_C
+     1  BP_Display_Powerup_VIP_C
+     3  BP_DoorDiamondSpire_Emergency_C
+    67  BP_DoorHotelRoomFrame_Base_C
+     1  BP_DoorLab_Blue_C
+     1  BP_DoorLab_C
+     1  BP_DoorLab_Green_C
+     1  BP_DoorLab_Orange_C
+     1  BP_DoorLab_Purple_C
+     1  BP_DoorManor_C
+    15  BP_DoorSR_Blue_C
+    18  BP_DoorSR_C
+     9  BP_DoorSR_Green_C
+     6  BP_DoorSR_Purple_C
+     5  BP_Door_Starfish_Blue_C
+     4  BP_Door_Starfish_Orange_C
+     8  BP_Door_Starfish_Purple_C
+    14  BP_EliteGuardWeapon_C
+     4  BP_ExtractionObjectiveHud_C
+     1  BP_Extraction_ObjectiveCarrier_CavaliereScannable_C
+    49  BP_Fieldupgrade_Spawn_C
+     1  BP_Gadget_MimicScannableMaster_C
+     1  BP_Gadget_PositionerComponent_C
+     6  BP_GooPodSpawn_C
+    33  BP_GuardObservation_Interactable_C
+    41  BP_GuardWeapon_C
+     3  BP_HardCurrencyPile_Pickable_C
+     1  BP_HealthConsumableSyringeFailed_C
+     1  BP_HealthConsumableSyringe_3P_C
+     1  BP_HealthConsumableSyringe_C
+     1  BP_Interactable_CleaningSponge_C
+     1  BP_MasterSocial_Interactable_C
+   318  BP_NPCAI_C
+     9  BP_NPCConversation_C
+     1  BP_NavQuery_Guard_C
+    22  BP_ObjectSpawn_BigLootable_C
+   471  BP_ObjectSpawn_Generic_C
+     7  BP_ObjectSpawn_LAFBoxes_C
+    37  BP_ObjectSpawn_VaultPrinter_C
+     2  BP_ObjectSpawningManager_C
+     2  BP_OutroCamera_C
+     2  BP_PopulationManager_C
+     2  BP_PosingSpyContainer_C
+    13  BP_PosingSpyContainer_IntroShowcase_C
+     1  BP_PosingSpyContainer_Intro_C
+    21  BP_PowerupChest_Civilian_C
+    11  BP_PowerupChest_Guard_C
+    13  BP_PowerupChest_Staff_C
+    17  BP_PowerupChest_Technician_C
+     1  BP_PowerupChest_VIP_C
+     2  BP_Powerup_Level_Civilian_C
+     1  BP_Powerup_Level_Civilian_Droppable_C
+     2  BP_Powerup_Level_Guard_C
+     1  BP_Powerup_Level_Guard_Droppable_C
+     2  BP_Powerup_Level_Staff_C
+     1  BP_Powerup_Level_Staff_Droppable_C
+     2  BP_Powerup_Level_Technician_C
+     1  BP_Powerup_Level_Technician_Droppable_C
+     2  BP_Powerup_Level_VIP_C
+     1  BP_Powerup_Level_VIP_Droppable_C
+     7  BP_Powerup_Level_VIP_Terminal_C
+     9  BP_RecessedLight_Medium_VaultHalls_DOWN_C
+    31  BP_SRDoorBathroom_C
+    16  BP_SR_MainHall_VaultDoors_C
+     2  BP_SR_ObjectivePedestal_C
+    12  BP_SR_VaultRcsdGenLight_C
+   102  BP_SR_VaultTunnel_WalkwayGens_C
+     8  BP_SecurityCamera_C
+     1  BP_SecurityCamera_Proto_C
+    42  BP_Sink_Interactable_C
+    14  BP_Small_Object_Spawn_C
+     3  BP_SocialInteract_VIPCatwalk_C
+     6  BP_SoftCurrencyPurse_Pickable_C
+    32  BP_SpawnpointCamera_C
+     1  BP_Spy_SpyPack_C
+    10  BP_TechObservation_Interactable_C
+     7  BP_TerminalSpawnpoint_C
+     1  BP_UltraGuardWeapon_C
+     1  BP_VFX_Extraction_ObjectiveCarrierPing_C
+     1  BP_VFX_NPCMeshOverlay_CoverScan_C
+     1  BP_VaultDoorBase_C
+     5  BP_VaultDoorSr_C
+     5  BP_VaultDoor_Override_IntelPool_C
+     7  BP_VaultFeedback_Light_C
+     1  BP_VaultOverridePrototype_C
+     6  BP_VaultTerminal_Spawnpoint_C
+     4  BP_VaultUnlockTerminal_C
+     2  BP_VaultZone_C
+     1  BP_VictimEffect_ObjectiveCarrierPing_C
+     1  BP_VictimEffect_ObjectiveEnemyPing_C
+     1  BP_VictimEffect_Status_CameraDrain_C
+     1  BP_VictimEffect_Status_VaultZone_Broadcast_C
+     1  BP_VictimEffect_Status_VaultZone_Drain_C
+     1  BP_VictimEffect_Status_VaultZone_Exposed_C
+     1  BP_VictimEffect_Vulnerable_RogueAgent_C
+    95  BP_Wall_Spawn_C
+     2  BP_WrapCameraMenuActor_C
+     1  BaseDoorActor
+     1  BaseGamePhaseInfo
+     1  BaseInteractableActor
+     1  BasePlaceableSpyTool
+     1  BasePowerupActor
+     1  BasePowerupChestActor
+     1  BaseSpyActiveAbility
+     1  BaseSpyPassiveAbility
+     1  BaseSpyTool
+     1  BaseSpyWeapon
+     1  BotActionInteract
+     1  BotObjective
+     9  BotObjectiveBriefcaseInVault
+     4  BotObjectiveCallExtraction
+     2  BotObjectiveExtract
+     8  BotObjectiveGetBriefcase
+    10  BotObjectiveKillCarrier
+     9  BotObjectiveOpenVault
+     9  BotObjectivePickUpBriefcase
+    10  BotObjectivePrintKeycard
+     1  BotObjectiveRequirement
+     9  BotObjectiveRequirementBriefcaseCarried
+     3  BotObjectiveRequirementExtractionCalled
+    17  BotObjectiveRequirementGamePhase
+     7  BotObjectiveRequirementHasBriefcase
+    10  BotObjectiveRequirementResource
+     1  BotSpawner
+     2  Bp_Objective_Terminal_C
+    38  CameraActor
+     1  CameraAnim
+     9  CameraAnimInst
+     1  CameraAnimationSequence
+     1  CameraBlockingVolume
+    68  CameraComponent
+     1  CameraModifier
+     2  CameraModifier_CameraShake
+     1  CameraRig_Crane
+     1  CameraRig_Rail
+     1  CameraShakeBase
+     1  CameraShakePattern
+     1  CameraShakeSourceActor
+     2  CameraShakeSourceComponent
+     2  CameraSubsystemPropertiesDAsset
+     2  CavActiveInteracterComponent
+     1  CavaliereActiveAbility
+     1  CavaliereActiveAbilityMod2
+     1  CavalierePassiveAbility
+     1  CavalierePassiveAbilityMod1
+     1  CavalierePassiveAbilityMod2
+     3  ChangePhaseComponent
+     1  ChaosClothingInteractor
+     1  ChaosClothingSimulationInteractor
+     1  ChargeLevelsWeaponComponent
+     1  ChargeSpawnerWeapon
+     1  ChavezActiveAbility
+     1  ChavezActiveAbilityMod1
+     1  ChavezActiveAbilityMod2
+     1  ChavezActiveAbilityMod2_1
+     1  ChavezPassiveAbility
+     1  ChavezPassiveAbilityMod1
+     1  ChavezPassiveAbilityMod2
+    18  CineCameraActor
+    19  CineCameraComponent
+     1  ClothingInteractor
+     1  ClothingSimulationInteractor
+   190  ClothingSimulationInteractorNv
+     1  CompositeCameraShakePattern
+     1  ConstantCameraShakePattern
+     1  CrowdAgentInterface
+    73  DIActiveAbilityItem
+     3  DIAgentBundleItem
+    29  DIAgentItem
+  1545  DIAgentSkinItem
+     2  DIAllowedGameModesHandler
+     1  DIAnimationBlueprintLibrary
+     2  DIAssetManager
+  1646  DIAsyncLoadWrapper
+     2  DIAutomatedBotManager
+   275  DIAvatarItem
+     2  DIBalancingData
+     2  DIBalancingManagerSubsytem
+   177  DIBundleItem
+   173  DICCItem
+     1  DICameraLense
+     2  DICameraSubsystem
+    11  DICatalogueItem
+     1  DICharacterMovementComponent
+     1  DIClientSession
+     2  DIClientWebServiceSession
+     3  DIConsumableItem
+     7  DICurrencyItem
+     4  DICurrencyType
+     1  DICustomGameUserWidget
+     1  DIDataStoreBlueprintLibrary
+     1  DIDedicatedServerManager
+     1  DIDemoNetDriver
+     1  DIEndScreenMenuUserWidget
+     2  DIFactionsManager
+     1  DIFreeSpectator
+     1  DIFreecamSettingsMenuUserWidget
+    29  DIGadgetItem
+     1  DIGameInstanceBase
+     2  DIGameRulesSubsystem
+     1  DIGameServerSession
+     2  DIGameServerWebServiceSession
+     1  DIInteractWidgetSubsystem
+   351  DIIntroPoseItem
+     1  DIItem
+     2  DIKillcamPlaybackManager
+     2  DILoadSubsystem
+     1  DILoadingScreenWidget
+     2  DILoadingSystemDataAsset
+     1  DILocalPlayer
+     1  DILootItem
+     1  DIMainMenuUserWidget
+     2  DIMapList
+     1  DIMatchesSubsystem
+     1  DIMatchmakingRequestHandler
+     1  DIMatchmakingTokenHandler
+     1  DIMenuKeybindingsWidget
+     1  DIMenuStoreShowcaseWidget
+     2  DIMenuSubsystem
+     1  DIMenuUserWidget
+     2  DINavigationSystem
+     2  DIObjectSpawnPresetsDataAsset
+     2  DIObjectsToSpawnCountDataAsset
+     2  DIObjectsToSpawnDataAsset
+     1  DIOnlineFriendInfo
+     2  DIOnlineFriendPresence
+     1  DIOnlinePartyInvite
+     2  DIOnlinePartyMemberInfo
+     2  DIPartySubsystem
+    75  DIPassiveAbilityItem
+     1  DIPingWidget
+     2  DIPlayerSettingsDataAsset
+     1  DIPlayerStart
+     2  DIPlayerState
+     2  DIPopulationManagerNPCSuspiciousnessDataAsset
+     3  DIPopulationManagerNpcSpawnDataAsset
+     3  DIPopulationManagerRoomWeightDataAsset
+     1  DIPopupAnnouncementUserWidget
+     1  DIPopupUserWidget
+     1  DIPosessionResolver
+     1  DIPrimaryDataAsset
+     1  DIPrivateLobbyMenuUserWidget
+     1  DIProgressionItem
+     2  DIRegionDetectorSubsystem
+     1  DIResultScreenMenuUserWidget
+     1  DISaveGame
+     2  DISaveGameSubsystem
+     1  DISelectFactionEntryWidget
+     1  DISelectFactionWidget
+     1  DISelectTeamPopupWidget
+     1  DISelectTeamWidget
+     1  DIServerBrowserFilterWidget
+     1  DIServerBrowserHeaderWidget
+     1  DIServerBrowserMenuWidget
+     1  DIServerInfoObject
+     1  DIServerInfoRowWidget
+     1  DIServerListWidget
+     1  DIServerPasswordPopupWidget
+     2  DISessionInventory
+     2  DISessionLoot
+     2  DISessionProgression
+     2  DISessionSelections
+     2  DISessionStats
+     2  DISessionSubsystem
+     1  DISettingsMenuUserWidget
+     2  DISocialSubsystem
+     1  DISpectatorPawn
+     3  DIStoreDataAsset
+     1  DIStoreMenuPageUserWidget
+     2  DIStoreSubsystem
+   291  DITitleItem
+     1  DIUserWidget
+   301  DIVoucherItem
+    73  DIWeaponItem
+   143  DIWidgetComponent
+     2  DIWorldAsyncLoadCache
+   557  DIWrapItem
+     2  DIXpEventDataAsset
+     1  DamageAoEActor
+     1  DamageDealerInterface
+     2  DamageModifier
+  1296  DamageModifiers
+     1  DamageNumber
+     1  DamageOutputModifierInterface
+     1  DamageType
+     1  DatasmithCineCameraActorTemplate
+     1  DatasmithCineCameraComponentTemplate
+     1  DeadNPCInteraction
+     1  DebugCameraController
+     1  DebugCameraControllerSettings
+     1  DebugCameraHUD
+     1  DeceiveIncBotController
+     1  DeceiveIncCheatManager
+     1  DeceiveIncControllerInterface
+     1  DeceiveIncDedicatedStartupGameState
+     2  DeceiveIncEngine
+     1  DeceiveIncGameModeBase
+     1  DeceiveIncGameRulesSettings
+     2  DeceiveIncGameSession
+     1  DeceiveIncGameStateBase
+     1  DeceiveIncMainGameState
+     1  DeceiveIncMatchGameState
+     1  DeceiveIncMenuGameModeBase
+     1  DeceiveIncPlayerBotController
+     1  DeceiveIncPlayerController
+     1  DeceiveIncPlayerVoiceChat
+     1  DeceiveIncPreGameState
+     1  DeceiveIncPrivateLobbyGameMode
+     1  DeceiveIncSettings
+     1  DefaultCameraShakeBase
+     4  DiSpy3PMovementSet
+     1  DiSpyAnimInstance1P
+     1  DiSpyAnimInstance3P
+     2  DiSpyAnimationMotionSet
+     1  DirectionalDamageIndicatorWidget
+   387  DisguiseAsNPCConditionComponent
+   108  DoorClosedConditionComponent
+     1  DroneSpawnerWeapon
+     1  EditableGameplayTagQueryExpression_AllExprMatch
+     1  EditableGameplayTagQueryExpression_AllTagsMatch
+     1  EditableGameplayTagQueryExpression_AnyExprMatch
+     1  EditableGameplayTagQueryExpression_AnyTagsMatch
+     1  EditableGameplayTagQueryExpression_NoExprMatch
+     1  EditableGameplayTagQueryExpression_NoTagsMatch
+     1  EmitterCameraLensEffectBase
+     1  EndMatchCallbackProxy
+     1  ExtractionArrivedPhaseInfo
+     1  ExtractionArrivingPhaseInfo
+     1  ExtractionInteractableActor
+     4  FallDamageComponent
+     1  FindTurnBasedMatchCallbackProxy
+    13  GadgetData
+     1  GadgetInterface
+     1  GameMode
+     1  GameModeBase
+    25  GamePhaseConditionComponent
+     1  GameState
+     1  GameStateBase
+     1  GameplayTask_SpawnActor
+  1351  GenericNPCInteraction
+     1  GenericTeamAgentInterface
+     2  HUD_AnnouncementPhaseChange_C
+     2  HUD_ChangeAgentTAB_C
+     2  HUD_CurrentObjectiveTip_C
+     2  HUD_CurrentObjective_C
+     2  HUD_DamageFeedback_C
+     1  HUD_DirectionalDamageIndicator_C
+     2  HUD_InteractTooltip_C
+     1  HUD_Interact_ScanMimicable_C
+     1  HUD_Interact_ScanTrappable_C
+     3  HUD_Interactable_C
+     2  HUD_LoadoutButtonWPN_C
+     3  HUD_LoadoutButton_C
+     2  HUD_Loadout_Master_C
+     1  HUD_NavMode_HealthCharge_C
+     1  HUD_NavMode_Health_C
+     1  HUD_NavMode_Objective_C
+     1  HUD_NavMode_VaultDoor_C
+     1  HUD_NavMode_VaultLocation_Unknown_C
+     1  HUD_PP_Vault_C
+     2  HUD_PlayerHealth_C
+     2  HUD_PlayerObjective_C
+     2  HUD_SE_ObjectivePing_TImer_C
+     2  HUD_VaultCounter_C
+     1  HUD_VaultPrinterScreen_C
+     1  HUD_VaultTimer_C
+     1  HansActiveAbility
+     1  HansActiveAbilityMod1
+     1  HansActiveAbilityMod2
+     1  HansPassiveAbility
+     1  HansPassiveAbilityMod1
+     1  HansPassiveAbilityMod2
+  1446  HealthComponent
+     1  HealthConditionComponent
+     1  HealthSnapshotBlueprintLibrary
+     1  HitscanWeapon
+     1  HoudiniInputCameraComponent
+     1  ImpulseWeaponComponent
+     1  InteractableActorInterface
+  3081  InteractableComponent
+     5  InteracterComponent
+    11  InteractionAuthorityComponent
+    10  InteractionIconComponent
+     1  InteractionIconWidget
+     1  InteractionMechanic
+     1  InteractiveFoliageActor
+     2  InteractiveFoliageComponent
+     1  InteractiveGizmo
+     1  InteractiveGizmoBuilder
+     1  InteractiveGizmoManager
+     1  InteractiveTool
+     1  InteractiveToolBuilder
+     1  InteractiveToolManager
+     1  InteractiveToolPropertySet
+     1  InteractiveToolsContext
+     1  InterpGroupCamera
+     1  InterpGroupInstCamera
+     1  IntroPhaseInfo
+     1  LarcinActiveAbility
+     1  LarcinActiveMod1Ability
+     1  LarcinPassiveAbility
+     1  LarcinPassiveMod1Ability
+     1  LarcinPassiveMod1_2Ability
+     4  LimitedEventXpProgressionData
+     2  LocalSpyEventBus
+     2  LootRewardPoolDataAsset
+    11  MapData
+     1  Matchmaker
+     2  MatchmakerImpl
+     1  MaterialExpressionCameraPositionWS
+     1  MaterialExpressionCameraVectorWS
+     1  MaterialExpressionMapARPassthroughCameraUV
+     1  MatineeActorCameraAnim
+     1  MatineeCameraShake
+     1  MatineeCameraShakeFunctionLibrary
+     2  MatineeCameraShakePattern
+     1  MaxHealthConditionComponent
+     1  MeleeWeapon
+     1  MovieSceneCameraAnimSection
+     1  MovieSceneCameraAnimTrack
+     3  MovieSceneCameraCutSection
+     3  MovieSceneCameraCutTrack
+     1  MovieSceneCameraCutTrackInstance
+     1  MovieSceneCameraShakeEvaluator
+     1  MovieSceneCameraShakeSection
+     1  MovieSceneCameraShakeSourceShakeSection
+     1  MovieSceneCameraShakeSourceShakeTrack
+     1  MovieSceneCameraShakeSourceTriggerSection
+     1  MovieSceneCameraShakeSourceTriggerTrack
+     1  MovieSceneCameraShakeTrack
+     1  MovieSceneMatineeCameraShakeEvaluator
+    11  MovieSceneNiagaraSystemSpawnSection
+     1  MovieScenePostSpawnEventSystem
+     1  MovieScenePreSpawnEventSystem
+    21  MovieSceneSpawnSection
+    21  MovieSceneSpawnTrack
+     2  MovieSceneSpawnablesSystem
+     1  NPCAIActor
+     1  NPCAdditionalComponent
+     1  NPCBehavior
+   320  NPCBehaviorControlled
+   320  NPCBehaviorDefault
+    64  NPCBehaviorFollow
+   320  NPCBehaviorInteract
+    64  NPCBehaviorInvestigate
+   320  NPCBehaviorScared
+   178  NPCBehaviorScold
+     1  NPCBug
+     1  NPCBugSpawnerWeapon
+     1  NPCCharacter
+   200  NPCContainerInteraction
+    10  NPCConversationComponent
+     9  NPCConversationInteraction
+    67  NPCGuardComponent
+     1  NPCInteraction
+  1456  NPCInteractionComponent
+   387  NPCMotionSetComponent
+   387  NPCMovementComponent
+     1  NavAgentInterface
+     1  NavAreaMeta_SwitchByAgent
+     1  NiagaraDataInterfaceCamera
+     1  NiagaraEventReceiverEmitterAction_SpawnParticles
+     1  ObjectSpawn
+   304  ObjectSpawnComponent
+     1  ObjectSpawnInterface
+     1  ObjectSpawningManager
+     1  ObjectiveCarrierVictimEffect
+     2  ObjectiveProximityData
+     2  ObjectiveProximitySubsystem
+     1  OctoActiveAbility
+     1  OctoActiveAbilityMod1
+     1  OctoActiveAbilityMod2
+     1  OctoBaseActiveAbility
+     1  OctoDrainingActiveAbility
+     1  OctoPassiveAbility
+     1  OctoPassiveAbilityLuckBased
+     1  OctoPassiveAbilityMod1
+     1  OctoPassiveAbilityMod2
+     1  ParticleModuleCameraBase
+     1  ParticleModuleCameraOffset
+     1  ParticleModuleEventReceiverSpawn
+     1  ParticleModuleSpawn
+     1  ParticleModuleSpawnBase
+     1  ParticleModuleSpawnPerUnit
+     1  PathFollowingAgentInterface
+     2  PerlinNoiseCameraShakePattern
+     2  PlayableAgentList
+     2  PlayerCameraManager
+     1  PopulationManager
+     1  PosingSpy
+    17  PosingSpyActorContainer
+     1  PosingSpyAnimInstance
+     1  PosingSpy_Lightrig_Blueprint_C
+     2  PowerupData
+    11  PowerupManagerComponent
+     2  PregameLobbyMapData
+     2  PregameLobbyPhaseInfo
+     1  ProceduralFoliageSpawner
+     6  ProgressionRewardData
+     1  ProjectileSpawnedActorInterface
+     1  ProjectileWeapon
+     1  QuitMatchCallbackProxy
+     3  RangeInteracterComponent
+     1  ResultScreenPhaseInfo
+     4  ReviveSpyConditionComponent
+     2  RewardBundleDataAsset
+     1  RoomNavArea_Guard
+     2  SM_GunShelf_Door_A_01_Shortcut_C
+     1  SasoriActiveAbility
+     1  SasoriActiveAbilityMod1
+     1  SasoriActiveAbilityMod2
+     1  SasoriBaseActiveAbility
+     1  SasoriPassiveAbility
+     1  SasoriPassiveAbilityMod1
+     1  SasoriPassiveAbilityMod2
+     2  SequenceCameraShakeCameraStandIn
+     1  SequenceCameraShakePattern
+     2  SequenceCameraShakeSequencePlayer
+     1  SessionAgentSelectionInfo
+     1  ShieldbrellaSpawnerWeapon
+     1  SimpleCameraShakePattern
+  1376  SocialInteractConditionComponent
+     1  SocialiteActiveAbility
+     1  SocialiteActiveAbilityMod1
+     1  SocialiteActiveAbilityMod2
+     1  SocialitePassiveAbility
+     1  SocialitePassiveAbilityMod1
+     1  SocialitePassiveAbilityMod2
+     1  SourceEffectPhaserPreset
+     1  SpawnableObjectInterface
+     1  SpawnerWeapon
+     1  SpawnerWeaponInterface
+     1  SpawnerWeaponRound
+     1  SpawnerWeaponRound_Beam
+     1  SpawnerWeaponRound_Charge
+     1  SpawnerWeaponRound_Projectile
+     1  SpawnerWeaponRound_Shield
+     1  SprayChargeSpawnerWeapon
+     1  SprayWeapon
+     1  Spy
+     1  Spy3DPortrait
+     1  SpyCache
+     1  SpyCheatsComponent
+     9  SpyGameModeMapData
+     1  SpyGamePhaseInfo
+     1  SpyGlassTool
+     1  SpyPack
+     1  SpyPing
+     1  SpyWeaponInterface
+     1  SquireActiveAbility
+     1  SquireActiveAbilityMod2
+     1  SquirePassiveAbility
+     1  SquirePassiveAbilityMod1
+     1  SquirePassiveAbilityMod2
+     1  TestCameraShake
+     1  ThrowableWeapon
+     3  ToolLoadoutComponent
+     1  Tripwire
+     2  TripwireDedicatedServerManager
+     1  TripwireServerSettings
+     1  TripwireTool
+     1  TurnBasedMatchInterface
+     1  TwMatchDataAggregator
+     6  VaultDoorOverrideCondition
+     1  VaultLockedPhaseInfo
+     1  VaultUnlockedPhaseInfo
+     1  VictimEffectTickBehavior_Damage
+     1  VictimEffectTickBehavior_InstantDamage
+     1  VigilActiveAbility
+     1  VigilPassiveAbilityDeviceBased
+     1  WaveOscillatorCameraShakePattern
+     1  WeaponOverheatComponent
+     1  WeaponSprayDataAsset
+     1  WidgetInteractionComponent
+     1  XiuActiveAbility
+     1  XiuPassiveAbility
+     1  XiuPassiveAbilityMod1
+     1  XiuPassiveAbilityMod2
+     4  XpProgressionData
+     1  YumiActiveAbility
+     1  YumiPassiveAbility
+     1  YumiPassiveAbilityMod1
+     1  YumiPassiveAbilityMod2
+
+---- scalar properties per class ('<==' = looks tunable) ----
+
+=== AISense_Damage   x1
+      DefaultExpirationAge = 3.4028234663853e+38
+
+=== AOEWeaponComponent   x1
+  <== AOEDamage = 10.0
+
+=== ARSharedWorldGameMode   x1
+  <== BufferSizePerChunk = 512
+
+=== ARTextureCameraDepth   x1
+      DepthQuality = 0
+      TextureType = 2
+  <== ForceMipLevelsToBeResidentTimestamp = 0.0
+
+=== ARTextureCameraImage   x1
+      TextureType = 1
+  <== ForceMipLevelsToBeResidentTimestamp = 0.0
+
+=== AYumiPassiveAbilityMod1_2   x1
+  <== PercentRefunded = 10.0
+
+=== AceTrailActiveAbility   x1
+      TrailVFXLookAheadDist = 100.0
+
+=== ActiveAbilityConditionComponent   x2461
+  <== bCanInteractWhenInMimic = true
+      Restrictions = 0
+
+=== AgentData   x14
+      Difficulty = 0
+
+=== AnimNotify_GuardSetWeaponVisibility_C   x5
+      Visibility = false
+
+=== AnimNotify_SpyDespawnProp_C   x3
+      FirstPerson = true
+
+=== BPWeapon_HitscanBase_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Squire_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BP_BaseDoorActor_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_CameraLense_C   x2
+      AutoActivateForPlayer = 0
+
+=== BP_Container_OrangeCardSpawnerHS_C   x1
+  <== bAllowNPCInteraction = true
+
+=== BP_Container_PurpleCardSpawnerHS_C   x3
+  <== bAllowNPCInteraction = true
+
+=== BP_Container_PurpleCardSpawnerSE_C   x1
+  <== bAllowNPCInteraction = true
+
+=== BP_DamageModifier_DisguiseShield_Disguise_C   x2
+  <== Multipliers = 1.0
+
+=== BP_DamageModifier_DisguiseShield_Spy_C   x2
+  <== Multipliers = 1.0
+
+=== BP_DamageType_Fall_C   x1
+      bCausedByWorld = true
+
+=== BP_DeceiveIncBotController_C   x1
+      bStartAILogicOnPossess = false
+
+=== BP_DoorDiamondSpire_Emergency_C   x3
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Blue_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Green_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Orange_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Purple_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorManor_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Blue_C   x15
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_C   x18
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Green_C   x9
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Purple_C   x6
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Blue_C   x5
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Orange_C   x4
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Purple_C   x8
+      bAppearAsLocallyUnlocked = false
+
+=== BP_EliteGuardWeapon_C   x14
+  <== EffectiveRange = 10000.0
+
+=== BP_GuardWeapon_C   x41
+  <== EffectiveRange = 10000.0
+
+=== BP_ObjectSpawningManager_C   x2
+  <== FillingObjectsMaxWeightFactor = 45.0
+
+=== BP_SRDoorBathroom_C   x31
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Spy_SpyPack_C   x1
+  <== HealthCount = 25
+
+=== BP_UltraGuardWeapon_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BP_VaultDoorBase_C   x1
+      bShouldDoAnimNotifies = true
+
+=== BP_VaultDoorSr_C   x5
+      bShouldDoAnimNotifies = true
+
+=== BP_VictimEffect_ObjectiveCarrierPing_C   x1
+  <== PostPingCooldown = 1.0
+      EffectPositioningRule = 0
+
+=== BP_VictimEffect_ObjectiveEnemyPing_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_CameraDrain_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Broadcast_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Drain_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Exposed_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Vulnerable_RogueAgent_C   x1
+      EffectPositioningRule = 2
+
+=== BP_WrapCameraMenuActor_C   x2
+      AutoActivateForPlayer = 0
+
+=== BaseDoorActor   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BotSpawner   x1
+      bAutoSpawnOnStart = false
+
+=== CameraActor   x38
+      AutoActivateForPlayer = 0
+
+=== CameraBlockingVolume   x1
+      BrushType = 0
+
+=== CameraComponent   x68
+      FieldOfView = 90.0
+
+=== CameraModifier   x1
+      bDebug = false
+
+=== CameraModifier_CameraShake   x2
+      bDebug = false
+
+=== CameraRig_Crane   x1
+      CranePitch = 0.0
+
+=== CameraRig_Rail   x1
+      CurrentPositionOnRail = 0.0
+
+=== CameraShakeBase   x1
+      bSingleInstance = false
+
+=== CameraShakeSourceComponent   x2
+      Attenuation = 1
+
+=== CavActiveInteracterComponent   x2
+  <== RangeInteractDistance = 2500.0
+
+=== CavalierePassiveAbilityMod2   x1
+  <== MinMeleeChargeLevel = 0
+
+=== ChangePhaseComponent   x3
+      NextPhase = 0
+
+=== ChavezActiveAbilityMod1   x1
+      CurrentWeaponBuff = 0.0
+
+=== ChavezActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== ChavezActiveAbilityMod2_1   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== ChavezPassiveAbilityMod1   x1
+  <== MaxOverhealAmmount = 50.0
+
+=== CineCameraActor   x18
+      AutoActivateForPlayer = 0
+
+=== CineCameraComponent   x19
+      FieldOfView = 27.953815460205
+
+=== ConstantCameraShakePattern   x1
+  <== Duration = 1.0
+
+=== DIActiveAbilityItem   x73
+      ItemId = -1
+
+=== DIAgentBundleItem   x3
+      ItemId = -1
+
+=== DIAgentItem   x29
+      ItemId = -1
+
+=== DIAgentSkinItem   x1545
+      ItemId = -1
+
+=== DIAvatarItem   x275
+      ItemId = -1
+
+=== DIBundleItem   x177
+      ItemId = -1
+
+=== DICCItem   x173
+      ItemId = -1
+
+=== DICameraLense   x1
+      AutoActivateForPlayer = 0
+
+=== DICatalogueItem   x11
+      ItemId = -1
+
+=== DIConsumableItem   x3
+      ItemId = -1
+
+=== DICurrencyItem   x7
+      ItemId = -1
+
+=== DIFreeSpectator   x1
+  <== BaseTurnRate = 45.0
+
+=== DIGadgetItem   x29
+      ItemId = -1
+
+=== DIIntroPoseItem   x351
+      ItemId = -1
+
+=== DIItem   x1
+      ItemId = -1
+
+=== DILootItem   x1
+      ItemId = -1
+
+=== DIMenuStoreShowcaseWidget   x1
+      bHasVariation = false
+
+=== DIOnlineFriendPresence   x2
+  <== bIsOnline = false
+
+=== DIPassiveAbilityItem   x75
+      ItemId = -1
+
+=== DIPingWidget   x1
+      bFollowPosition = false
+
+=== DIPlayerState   x2
+      Score = 0.0
+
+=== DIProgressionItem   x1
+      ItemId = -1
+
+=== DISelectFactionEntryWidget   x1
+      PortraitStyle = 1
+
+=== DIServerBrowserMenuWidget   x1
+      AutoRefreshIntervalSeconds = 15.0
+
+=== DIServerInfoRowWidget   x1
+      bSelected = false
+
+=== DISpectatorPawn   x1
+  <== BaseTurnRate = 90.0
+
+=== DIStoreMenuPageUserWidget   x1
+  <== StoreRefreshDelay = 0.5
+
+=== DITitleItem   x291
+      ItemId = -1
+
+=== DIUserWidget   x1
+      bFollowPosition = false
+
+=== DIVoucherItem   x301
+      ItemId = -1
+
+=== DIWeaponItem   x73
+      ItemId = -1
+
+=== DIWidgetComponent   x143
+      bOnlyTickWhenVisible = true
+      Space = 0
+  <== MinDrawDistance = 0.0
+
+=== DIWrapItem   x557
+      ItemId = -1
+
+=== DamageModifier   x2
+  <== Multipliers = 1.0
+
+=== DamageNumber   x1
+  <== DamageValue = 0.0
+
+=== DamageType   x1
+      bCausedByWorld = false
+
+=== DebugCameraController   x1
+      bShowSelectedInfo = true
+
+=== DeceiveIncBotController   x1
+      bStartAILogicOnPossess = false
+
+=== DeceiveIncEngine   x2
+  <== MaxDeltaTime = 0.0
+
+=== DeceiveIncGameSession   x2
+  <== MaxSpectators = 2
+
+=== DeceiveIncPlayerBotController   x1
+      bStartAILogicOnPossess = false
+
+=== DeceiveIncSettings   x1
+  <== bIsPlaytestBuild = false
+
+=== DefaultCameraShakeBase   x1
+      bSingleInstance = false
+
+=== DisguiseAsNPCConditionComponent   x387
+      Restrictions = 0
+
+=== DoorClosedConditionComponent   x108
+      Restrictions = 0
+
+=== DroneSpawnerWeapon   x1
+      WallOffset = 34.0
+  <== EffectiveRange = 10000.0
+
+=== ExtractionInteractableActor   x1
+  <== ZoneTimeToExtract = 8.0
+
+=== GamePhaseConditionComponent   x25
+      Restrictions = 0
+
+=== HUD_InteractTooltip_C   x2
+      bFollowPosition = false
+
+=== HUD_Interact_ScanMimicable_C   x1
+  <== bIsRepeatableInteraction = false
+
+=== HUD_Interact_ScanTrappable_C   x1
+  <== bIsRepeatableInteraction = false
+
+=== HUD_Interactable_C   x3
+  <== bIsRepeatableInteraction = false
+
+=== HUD_NavMode_HealthCharge_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_Health_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_Objective_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_VaultDoor_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_VaultLocation_Unknown_C   x1
+      bFollowPosition = true
+
+=== HUD_PP_Vault_C   x1
+      bFollowPosition = false
+
+=== HUD_SE_ObjectivePing_TImer_C   x2
+      bFollowPosition = false
+
+=== HansActiveAbility   x1
+  <== EffectiveAimRange = 10000.0
+
+=== HansActiveAbilityMod1   x1
+  <== EffectiveAimRange = 10000.0
+
+=== HansActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== HansPassiveAbilityMod2   x1
+  <== PercentRefunded = 10.0
+
+=== HealthComponent   x1446
+      FactionID = 255
+
+=== HealthConditionComponent   x1
+  <== HealthAmount = 0.15000000596046
+      Restrictions = 0
+
+=== HitscanWeapon   x1
+  <== EffectiveRange = 10000.0
+
+=== HoudiniInputCameraComponent   x1
+      FOV = 0.0
+
+=== ImpulseWeaponComponent   x1
+      AimImpulse = -1000.0
+
+=== InteractionIconComponent   x10
+      bOnlyTickWhenVisible = true
+      Space = 0
+  <== MinDrawDistance = 0.0
+
+=== InteractionIconWidget   x1
+  <== bIsRepeatableInteraction = false
+
+=== InteractiveFoliageComponent   x2
+      ForcedLodModel = 0
+  <== MinDrawDistance = 0.0
+
+=== LarcinActiveAbility   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== LarcinActiveMod1Ability   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== LimitedEventXpProgressionData   x4
+  <== MinLvlToCheckForXpOverflow = 10
+
+=== MatineeCameraShake   x1
+  <== OscillationDuration = 0.0
+      bSingleInstance = false
+
+=== MaxHealthConditionComponent   x1
+  <== MaxHealthAmount = 0.15000000596046
+      Restrictions = 0
+
+=== MeleeWeapon   x1
+      bDisableBaseMeleeOnUse = true
+
+=== MovieSceneCameraCutSection   x3
+      bLockPreviousCamera = false
+
+=== MovieSceneCameraCutTrack   x3
+  <== bCanBlend = false
+
+=== MovieSceneNiagaraSystemSpawnSection   x11
+      SectionStartBehavior = 0
+
+=== MovieSceneSpawnSection   x21
+      DefaultValue = false
+
+=== NPCBehaviorDefault   x320
+  <== ChancesToInteract = 28.0
+
+=== NPCBehaviorFollow   x64
+  <== FollowDistZMin = 100.0
+
+=== NPCConversationComponent   x10
+  <== MaxNPCInConversation = 5
+      bLookingTowardInteract = false
+
+=== NPCGuardComponent   x67
+      bInvestigatingSpy = false
+
+=== NPCInteractionComponent   x1456
+      bLookingTowardInteract = false
+
+=== NavAreaMeta_SwitchByAgent   x1
+      DefaultCost = 1.0
+
+=== NiagaraDataInterfaceCamera   x1
+      PlayerControllerIndex = 0
+
+=== NiagaraEventReceiverEmitterAction_SpawnParticles   x1
+  <== NumParticles = 0
+
+=== ObjectSpawningManager   x1
+  <== FillingObjectsMaxWeightFactor = 4.0
+
+=== ObjectiveCarrierVictimEffect   x1
+  <== PostPingCooldown = 1.0
+      EffectPositioningRule = 2
+
+=== OctoActiveAbility   x1
+  <== DetectionRange = 2500.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoActiveAbilityMod1   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoActiveAbilityMod2   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoBaseActiveAbility   x1
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoDrainingActiveAbility   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoPassiveAbility   x1
+      ResourceTypeToCheck = 3
+
+=== OctoPassiveAbilityLuckBased   x1
+      bTriggersOnIntelSpent = true
+
+=== OctoPassiveAbilityMod1   x1
+  <== PercentChances_IntelMissing1 = 10.0
+      bTriggersOnIntelSpent = true
+
+=== OctoPassiveAbilityMod2   x1
+  <== PercentChancesToRefillActive = 10.0
+      bTriggersOnIntelSpent = true
+
+=== ParticleModuleCameraBase   x1
+      bSpawnModule = false
+
+=== ParticleModuleCameraOffset   x1
+      bSpawnModule = true
+
+=== ParticleModuleEventReceiverSpawn   x1
+      EventGeneratorType = 0
+      bSpawnModule = true
+
+=== ParticleModuleSpawn   x1
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== ParticleModuleSpawnBase   x1
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== ParticleModuleSpawnPerUnit   x1
+      UnitScalar = 50.0
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== PerlinNoiseCameraShakePattern   x2
+  <== LocationAmplitudeMultiplier = 1.0
+  <== Duration = 1.0
+
+=== ProceduralFoliageSpawner   x1
+      RandomSeed = 42
+
+=== RangeInteracterComponent   x3
+  <== RangeInteractDistance = 2500.0
+
+=== ReviveSpyConditionComponent   x4
+  <== CurrentReviveCount = 0
+      Restrictions = 0
+
+=== RoomNavArea_Guard   x1
+      DefaultCost = 1.0
+
+=== SasoriActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== SequenceCameraShakeCameraStandIn   x2
+      FieldOfView = 0.0
+
+=== SimpleCameraShakePattern   x1
+  <== Duration = 1.0
+
+=== SocialInteractConditionComponent   x1376
+      Restrictions = 0
+
+=== SocialitePassiveAbilityMod1   x1
+  <== PassiveRange = 2000.0
+
+=== SpawnerWeaponRound_Charge   x1
+  <== FullyChargeSpeed = 2000.0
+  <== MaximumTimeToLive = 6.0
+
+=== SpawnerWeaponRound_Projectile   x1
+  <== MaximumTimeToLive = 6.0
+
+=== SprayWeapon   x1
+  <== EffectiveRange = 10000.0
+
+=== SpyPack   x1
+  <== HealthCount = 30
+
+=== SquireActiveAbility   x1
+  <== DetectionRange = 3000.0
+
+=== SquireActiveAbilityMod2   x1
+  <== EffectRange = 2500.0
+
+=== SquirePassiveAbility   x1
+  <== SpeedBoostDuration = 3.0
+
+=== SquirePassiveAbilityMod1   x1
+  <== PingDuration = 3.0
+
+=== TestCameraShake   x1
+      bSingleInstance = false
+
+=== VaultDoorOverrideCondition   x6
+      RequiredIntel = 30
+      Restrictions = 0
+
+=== VictimEffectTickBehavior_Damage   x1
+  <== Damage = 0.0
+
+=== VictimEffectTickBehavior_InstantDamage   x1
+  <== Damage = 0.0
+
+=== WaveOscillatorCameraShakePattern   x1
+  <== LocationAmplitudeMultiplier = 1.0
+  <== Duration = 1.0
+
+=== WeaponOverheatComponent   x1
+      HeatIncreasePerShot = 0.10000000149012
+
+=== XiuPassiveAbility   x1
+  <== DetectionRange = 3000.0
+
+=== XiuPassiveAbilityMod1   x1
+      LoSDistance = 14440000.0
+
+=== XpProgressionData   x4
+  <== MinLvlToCheckForXpOverflow = 10
+
+=== YumiPassiveAbility   x1
+  <== GadgetsPercentCooldownReduction = 0.5
+
+=== YumiPassiveAbilityMod1   x1
+  <== HealthBuff = 0.5
+
+################ END ################
+
+################ DICensus t+120s ################
+objects walked: 186993   game-owned instances: 33367
+
+---- class tally (746 distinct) ----
+    45  ABP_Amber_GuardBehavior_C
+     1  ABP_BaseGuard_C
+     1  ABP_BaseSpyMelee_1P_C
+     9  ABP_BaseSpyMelee_3P_C
+     1  ABP_BaseSpy_1P_C
+     3  ABP_BaseSpy_3P_C
+     2  ABP_Chavez_SpyHandTool_Weapon_3P_C
+     1  ABP_Chavez_SpyHandTool_Weapon_C
+    15  ABP_EliteAmber_GuardBehavior_C
+   530  ABP_GuardBehavior_C
+    45  ABP_GuardBehavior_Douglas_C
+    24  ABP_GuardBehavior_EliteDouglas_C
+     2  ABP_Hans_SpyHandTool_Weapon_3P_C
+     1  ABP_Hans_SpyHandTool_Weapon_C
+     1  ABP_Hans_SpyHandTool_Weapon_MOD02_C
+     1  ABP_HealthConsumable_1P_C
+     3  ABP_Larcin_SpyHandTool_Weapon_3P_C
+     1  ABP_Larcin_SpyHandTool_Weapon_C
+     1  ABP_Larcin_SpyHandTool_Weapon_Mod01_C
+     1  ABP_NPC_C
+     2  ABP_Octo_SpyHandTool_Weapon_3P_C
+     1  ABP_Octo_SpyHandTool_Weapon_C
+     1  ABP_PosingSpy_C
+     1  ABP_PosingSpy_Weapon_Xiu_Mod2_3p_C
+     3  ABP_SpyHandTool_Weapon_HitscanBase_3P_C
+     1  ABP_SpyHandTool_Weapon_HitscanBase_C
+     1  ABP_SpyHandTool_Weapon_HitscanBase_MOD01_C
+     1  ABP_Spy_BounceMatTool3P_C
+     1  ABP_Spy_BounceMatTool_C
+     1  ABP_Spy_CallingCardTool_3P_C
+     1  ABP_Spy_CallingCardTool_C
+     1  ABP_Spy_Poudrier3P_C
+     1  ABP_Spy_Poudrier_C
+     1  ABP_Spy_ScramblerTool3P_C
+     1  ABP_Spy_ScramblerTool_C
+     2  ABP_WeaponChavez_3P_C
+     2  ABP_WeaponChavez_C
+     3  ABP_WeaponLarcin_3P_C
+     3  ABP_WeaponLarcin_C
+     3  ABP_WeaponSquire_3P_C
+     2  ABP_WeaponSquire_C
+     2  ABP_WeaponSquire_Mod01_C
+     2  ABP_Weapon_Hans_C
+     2  ABP_Weapon_Octo_3P_C
+     2  ABP_Weapon_Octo_C
+     2  ABP_Weapon_Xiu_3P_C
+     1  ABP_Weapon_Xiu_C
+     2  ABP_Weapon_Xiu_Mod1_C
+     2  ABP_Xiu_SpyHandTool_Weapon_3P_C
+     1  ABP_Xiu_SpyHandTool_Weapon_C
+     1  ABP_Xiu_SpyHandTool_Weapon_Mod01_C
+     1  AISenseConfig_Damage
+     1  AISenseEvent_Damage
+     1  AISense_Damage
+     1  ALI_Guard_C
+     1  ALI_SpyActiveAbility_C
+     1  ALI_SpyCustomSkin_C
+     1  ALI_SpyHandTool_C
+     1  ALI_SpyMeleeAttack_C
+     1  AOEWeaponComponent
+     1  ARSharedWorldGameMode
+     1  ARSharedWorldGameState
+     1  ARTextureCameraDepth
+     1  ARTextureCameraImage
+     1  AYumiPassiveAbilityMod1_2
+     1  AceActiveAbility
+     1  AceActiveAbilityHeatVision
+     1  AceActiveAbilityMod2
+     1  AcePassiveAbility
+     1  AceTrailActiveAbility
+  3381  ActiveAbilityConditionComponent
+    14  AgentData
+    37  AgentExpertiseSkillData
+   177  AgentIntroPoseDataAsset
+    37  AgentPassiveSkillData
+   769  AgentSkinData
+    37  AgentWeaponData
+   218  AnimNotify_FootstepsEvent_NPC_C
+     5  AnimNotify_GuardSetWeaponVisibility_C
+    22  AnimNotify_NPCDespawnProp_C
+    23  AnimNotify_NPCSpawnProp_C
+    12  AnimNotify_SpyDespawnProp_C
+     9  AnimNotify_SpySpawnProp_C
+     4  AnimNotify_SpySpawnProp_WeaponVariant_C
+    10  AttachToSpyComponent
+     1  BPFunctionLibrary_Gadgets_C
+     1  BPFunctionLibrary_SpyShared_Balancing_C
+     1  BPI_DamageNumbers_C
+     1  BPI_Interactables_C
+     1  BPI_NPC_C
+     1  BPI_ObjectiveTerminal_C
+     1  BPI_SpyBase_C
+     1  BPL_Interactables_C
+     1  BPLibrary_GadgetTeamOverlay_C
+     1  BPLibrary_VFX_Weapon_C
+     1  BPPosingSpy_Base_C
+     1  BPProj_ThrowableWeapon_Larcin_C
+     1  BPProj_ThrowableWeapon_Larcin_Mod1_C
+     1  BPProjectile_ChargeSpawnerWeapon_Base_C
+     1  BPProjectile_SpawnerWeapon_Base_C
+     1  BPSpy_Base_C
+     1  BPSpy_Chavez_C
+     2  BPSpy_Chavez_Main_V1_C
+     1  BPSpy_Hans_C
+     2  BPSpy_Hans_Main_V1_C
+     1  BPSpy_Larcin_C
+     3  BPSpy_Larcin_Main_V1_C
+     1  BPSpy_Octo_C
+     2  BPSpy_Octo_Main_V1_C
+     2  BPSpy_Squire_Blue_V2_C
+     1  BPSpy_Squire_C
+     2  BPSpy_Squire_Main_V1_C
+     1  BPSpy_Xiu_C
+     2  BPSpy_Xiu_Main_V1_C
+     2  BPWeapon_Chavez_C
+     1  BPWeapon_Hans_ADS_C
+     2  BPWeapon_Hans_ADS_Mod2_C
+     1  BPWeapon_Hans_C
+     2  BPWeapon_Hans_Mod2_C
+     1  BPWeapon_HitscanBase_C
+     1  BPWeapon_Larcin_C
+     3  BPWeapon_Larcin_Mod1_C
+     2  BPWeapon_Octo_ADS_C
+     2  BPWeapon_Octo_C
+     1  BPWeapon_SpawnerWeapon_Base_C
+     1  BPWeapon_SprayBase_C
+     2  BPWeapon_Squire_C
+     2  BPWeapon_Squire_Mod1_C
+     1  BPWeapon_Xiu_C
+     2  BPWeapon_Xiu_Mod1_C
+     1  BP_BaseDoorActor_C
+     1  BP_BaseGuard_C
+     1  BP_BaseInteractable_C
+     1  BP_BaseNPC_C
+     1  BP_BasePowerupChest_C
+     1  BP_BasePowerup_C
+     2  BP_CameraLense_C
+     2  BP_CameraOutro_Lose_C
+    12  BP_CivilianObservation_Interactable_C
+     1  BP_Container_OrangeCardSpawnerHS_C
+     3  BP_Container_PurpleCardSpawnerHS_C
+     1  BP_Container_PurpleCardSpawnerSE_C
+     3  BP_DamageModifier_Ace_Active_Mod1_C
+     9  BP_DamageModifier_DisguiseShield_Disguise_C
+     9  BP_DamageModifier_DisguiseShield_Spy_C
+     1  BP_DamageType_Fall_C
+     2  BP_DeceiveIncBaseGameMode_C
+     8  BP_DeceiveIncBotController_C
+     1  BP_DeceiveIncCheatManager_C
+     2  BP_DeceiveIncMatchGameState_C
+     2  BP_DeceiveIncPlayer_C
+     1  BP_DeceiveIncPregameLobbyState_C
+     1  BP_DeceiveIncSpyGameState_C
+     1  BP_DedicatedGameState_C
+     1  BP_DestroyedGadget_Bouncemat_C
+     1  BP_DestroyedGadget_Scrambler_C
+     1  BP_Display_Powerup_Civilian_C
+     1  BP_Display_Powerup_Guard_C
+     1  BP_Display_Powerup_Staff_C
+     1  BP_Display_Powerup_Technician_C
+     1  BP_Display_Powerup_VIP_C
+     3  BP_DoorDiamondSpire_Emergency_C
+    67  BP_DoorHotelRoomFrame_Base_C
+     1  BP_DoorLab_Blue_C
+     1  BP_DoorLab_C
+     1  BP_DoorLab_Green_C
+     1  BP_DoorLab_Orange_C
+     1  BP_DoorLab_Purple_C
+     1  BP_DoorManor_C
+    15  BP_DoorSR_Blue_C
+    18  BP_DoorSR_C
+     9  BP_DoorSR_Green_C
+     6  BP_DoorSR_Purple_C
+     5  BP_Door_Starfish_Blue_C
+     4  BP_Door_Starfish_Orange_C
+     8  BP_Door_Starfish_Purple_C
+    14  BP_EliteGuardWeapon_C
+     4  BP_ExtractionObjectiveHud_C
+     1  BP_Extraction_ObjectiveCarrier_CavaliereScannable_C
+    49  BP_Fieldupgrade_Spawn_C
+     1  BP_Gadget_MimicScannableMaster_C
+     1  BP_Gadget_PositionerComponent_C
+     6  BP_GooPodSpawn_C
+    33  BP_GuardObservation_Interactable_C
+    41  BP_GuardWeapon_C
+     3  BP_HardCurrencyPile_Pickable_C
+     1  BP_HealthConsumableSyringeFailed_C
+     1  BP_HealthConsumableSyringe_3P_C
+     1  BP_HealthConsumableSyringe_C
+     1  BP_Interactable_CleaningSponge_C
+     1  BP_MasterSocial_Interactable_C
+   655  BP_NPCAI_C
+     9  BP_NPCConversation_C
+     1  BP_NavQuery_Guard_C
+    22  BP_ObjectSpawn_BigLootable_C
+   471  BP_ObjectSpawn_Generic_C
+     7  BP_ObjectSpawn_LAFBoxes_C
+    37  BP_ObjectSpawn_VaultPrinter_C
+     2  BP_ObjectSpawningManager_C
+     2  BP_OutroCamera_C
+     2  BP_PopulationManager_C
+     2  BP_PosingSpyContainer_C
+    13  BP_PosingSpyContainer_IntroShowcase_C
+     1  BP_PosingSpyContainer_Intro_C
+    21  BP_PowerupChest_Civilian_C
+    11  BP_PowerupChest_Guard_C
+    13  BP_PowerupChest_Staff_C
+    17  BP_PowerupChest_Technician_C
+     1  BP_PowerupChest_VIP_C
+     2  BP_Powerup_Level_Civilian_C
+    49  BP_Powerup_Level_Civilian_Droppable_C
+     2  BP_Powerup_Level_Guard_C
+    49  BP_Powerup_Level_Guard_Droppable_C
+     2  BP_Powerup_Level_Staff_C
+    49  BP_Powerup_Level_Staff_Droppable_C
+     2  BP_Powerup_Level_Technician_C
+    49  BP_Powerup_Level_Technician_Droppable_C
+     2  BP_Powerup_Level_VIP_C
+    49  BP_Powerup_Level_VIP_Droppable_C
+     7  BP_Powerup_Level_VIP_Terminal_C
+     9  BP_RecessedLight_Medium_VaultHalls_DOWN_C
+    31  BP_SRDoorBathroom_C
+    16  BP_SR_MainHall_VaultDoors_C
+     2  BP_SR_ObjectivePedestal_C
+    12  BP_SR_VaultRcsdGenLight_C
+   102  BP_SR_VaultTunnel_WalkwayGens_C
+     8  BP_SecurityCamera_C
+     1  BP_SecurityCamera_Proto_C
+    42  BP_Sink_Interactable_C
+    14  BP_Small_Object_Spawn_C
+     3  BP_SocialInteract_VIPCatwalk_C
+     6  BP_SoftCurrencyPurse_Pickable_C
+    32  BP_SpawnpointCamera_C
+    49  BP_Spy_SpyPack_C
+    10  BP_TechObservation_Interactable_C
+     7  BP_TerminalSpawnpoint_C
+     1  BP_UltraGuardWeapon_C
+     1  BP_VFX_Extraction_ObjectiveCarrierPing_C
+     1  BP_VFX_NPCMeshOverlay_CoverScan_C
+     2  BP_VFX_NPCMeshOverlay_XiuSelection_C
+     1  BP_VaultDoorBase_C
+     5  BP_VaultDoorSr_C
+     5  BP_VaultDoor_Override_IntelPool_C
+     7  BP_VaultFeedback_Light_C
+     1  BP_VaultOverridePrototype_C
+     6  BP_VaultTerminal_Spawnpoint_C
+     4  BP_VaultUnlockTerminal_C
+     2  BP_VaultZone_C
+     1  BP_VictimEffect_HansActive_Guard_C
+     1  BP_VictimEffect_HansActive_Spy_C
+     1  BP_VictimEffect_ObjectiveCarrierPing_C
+     1  BP_VictimEffect_ObjectiveEnemyPing_C
+     1  BP_VictimEffect_Status_CameraDrain_C
+     1  BP_VictimEffect_Status_VaultZone_Broadcast_C
+     1  BP_VictimEffect_Status_VaultZone_Drain_C
+     1  BP_VictimEffect_Status_VaultZone_Exposed_C
+     1  BP_VictimEffect_Vulnerable_RogueAgent_C
+    95  BP_Wall_Spawn_C
+     1  BaseDoorActor
+     1  BaseGamePhaseInfo
+     1  BaseInteractableActor
+     1  BasePlaceableSpyTool
+     1  BasePowerupActor
+     1  BasePowerupChestActor
+     1  BaseSpyActiveAbility
+     1  BaseSpyPassiveAbility
+     1  BaseSpyTool
+     1  BaseSpyWeapon
+     1  BotActionInteract
+     1  BotObjective
+     9  BotObjectiveBriefcaseInVault
+     4  BotObjectiveCallExtraction
+     2  BotObjectiveExtract
+     8  BotObjectiveGetBriefcase
+    10  BotObjectiveKillCarrier
+     9  BotObjectiveOpenVault
+     9  BotObjectivePickUpBriefcase
+    10  BotObjectivePrintKeycard
+     1  BotObjectiveRequirement
+     9  BotObjectiveRequirementBriefcaseCarried
+     3  BotObjectiveRequirementExtractionCalled
+    17  BotObjectiveRequirementGamePhase
+     7  BotObjectiveRequirementHasBriefcase
+    10  BotObjectiveRequirementResource
+     1  BotSpawner
+     2  Bp_Objective_Terminal_C
+    38  CameraActor
+     1  CameraAnim
+     9  CameraAnimInst
+     1  CameraAnimationSequence
+     1  CameraBlockingVolume
+    93  CameraComponent
+     1  CameraModifier
+     2  CameraModifier_CameraShake
+     1  CameraRig_Crane
+     1  CameraRig_Rail
+     1  CameraShakeBase
+     1  CameraShakePattern
+     1  CameraShakeSourceActor
+     2  CameraShakeSourceComponent
+     2  CameraSubsystemPropertiesDAsset
+     2  CavActiveInteracterComponent
+     1  CavaliereActiveAbility
+     1  CavaliereActiveAbilityMod2
+     1  CavalierePassiveAbility
+     1  CavalierePassiveAbilityMod1
+     1  CavalierePassiveAbilityMod2
+     3  ChangePhaseComponent
+     1  ChaosClothingInteractor
+     1  ChaosClothingSimulationInteractor
+     1  ChargeLevelsWeaponComponent
+     1  ChargeSpawnerWeapon
+     1  ChavezActiveAbility
+     1  ChavezActiveAbilityMod1
+     1  ChavezActiveAbilityMod2
+     1  ChavezActiveAbilityMod2_1
+     1  ChavezPassiveAbility
+     1  ChavezPassiveAbilityMod1
+     1  ChavezPassiveAbilityMod2
+    18  CineCameraActor
+    19  CineCameraComponent
+     1  ClothingInteractor
+     1  ClothingSimulationInteractor
+   277  ClothingSimulationInteractorNv
+     1  CompositeCameraShakePattern
+     1  ConstantCameraShakePattern
+     1  CrowdAgentInterface
+    73  DIActiveAbilityItem
+     3  DIAgentBundleItem
+    29  DIAgentItem
+  1545  DIAgentSkinItem
+     2  DIAllowedGameModesHandler
+     1  DIAnimationBlueprintLibrary
+     2  DIAssetManager
+  1884  DIAsyncLoadWrapper
+     2  DIAutomatedBotManager
+   275  DIAvatarItem
+     2  DIBalancingData
+     2  DIBalancingManagerSubsytem
+   177  DIBundleItem
+   173  DICCItem
+     1  DICameraLense
+     2  DICameraSubsystem
+    11  DICatalogueItem
+     1  DICharacterMovementComponent
+     1  DIClientSession
+     2  DIClientWebServiceSession
+     3  DIConsumableItem
+     7  DICurrencyItem
+     4  DICurrencyType
+     1  DICustomGameUserWidget
+     1  DIDataStoreBlueprintLibrary
+     1  DIDedicatedServerManager
+     1  DIDemoNetDriver
+     1  DIEndScreenMenuUserWidget
+     2  DIFactionsManager
+     1  DIFreeSpectator
+     1  DIFreecamSettingsMenuUserWidget
+    29  DIGadgetItem
+     1  DIGameInstanceBase
+     2  DIGameRulesSubsystem
+     1  DIGameServerSession
+     2  DIGameServerWebServiceSession
+     1  DIInteractWidgetSubsystem
+   351  DIIntroPoseItem
+     1  DIItem
+     2  DIKillcamPlaybackManager
+     2  DILoadSubsystem
+     1  DILoadingScreenWidget
+     2  DILoadingSystemDataAsset
+     1  DILocalPlayer
+     1  DILootItem
+     1  DIMainMenuUserWidget
+     2  DIMapList
+     1  DIMatchesSubsystem
+     1  DIMatchmakingRequestHandler
+     1  DIMatchmakingTokenHandler
+     1  DIMenuKeybindingsWidget
+     1  DIMenuStoreShowcaseWidget
+     2  DIMenuSubsystem
+     1  DIMenuUserWidget
+     2  DINavigationSystem
+     2  DIObjectSpawnPresetsDataAsset
+     2  DIObjectsToSpawnCountDataAsset
+     2  DIObjectsToSpawnDataAsset
+     1  DIOnlineFriendInfo
+     2  DIOnlineFriendPresence
+     1  DIOnlinePartyInvite
+     2  DIOnlinePartyMemberInfo
+     2  DIPartySubsystem
+    75  DIPassiveAbilityItem
+     1  DIPingWidget
+     2  DIPlayerSettingsDataAsset
+     1  DIPlayerStart
+     9  DIPlayerState
+     2  DIPopulationManagerNPCSuspiciousnessDataAsset
+     3  DIPopulationManagerNpcSpawnDataAsset
+     3  DIPopulationManagerRoomWeightDataAsset
+     1  DIPopupAnnouncementUserWidget
+     1  DIPopupUserWidget
+     1  DIPosessionResolver
+     1  DIPrimaryDataAsset
+     1  DIPrivateLobbyMenuUserWidget
+     1  DIProgressionItem
+     2  DIRegionDetectorSubsystem
+     1  DIResultScreenMenuUserWidget
+     1  DISaveGame
+     2  DISaveGameSubsystem
+     1  DISelectFactionEntryWidget
+     1  DISelectFactionWidget
+     1  DISelectTeamPopupWidget
+     1  DISelectTeamWidget
+     1  DIServerBrowserFilterWidget
+     1  DIServerBrowserHeaderWidget
+     1  DIServerBrowserMenuWidget
+     1  DIServerInfoObject
+     1  DIServerInfoRowWidget
+     1  DIServerListWidget
+     1  DIServerPasswordPopupWidget
+     2  DISessionInventory
+     2  DISessionLoot
+     2  DISessionProgression
+     2  DISessionSelections
+     2  DISessionStats
+     2  DISessionSubsystem
+     1  DISettingsMenuUserWidget
+     2  DISocialSubsystem
+     1  DISpectatorPawn
+     3  DIStoreDataAsset
+     1  DIStoreMenuPageUserWidget
+     2  DIStoreSubsystem
+   291  DITitleItem
+     1  DIUserWidget
+   301  DIVoucherItem
+    73  DIWeaponItem
+   198  DIWidgetComponent
+     2  DIWorldAsyncLoadCache
+   557  DIWrapItem
+     2  DIXpEventDataAsset
+     1  DamageAoEActor
+     1  DamageDealerInterface
+     2  DamageModifier
+  1640  DamageModifiers
+     1  DamageNumber
+     1  DamageOutputModifierInterface
+     1  DamageType
+     1  DatasmithCineCameraActorTemplate
+     1  DatasmithCineCameraComponentTemplate
+     5  DeadNPCInteraction
+     1  DebugCameraController
+     1  DebugCameraControllerSettings
+     1  DebugCameraHUD
+     1  DeceiveIncBotController
+     1  DeceiveIncCheatManager
+     1  DeceiveIncControllerInterface
+     1  DeceiveIncDedicatedStartupGameState
+     2  DeceiveIncEngine
+     1  DeceiveIncGameModeBase
+     1  DeceiveIncGameRulesSettings
+     2  DeceiveIncGameSession
+     1  DeceiveIncGameStateBase
+     1  DeceiveIncMainGameState
+     1  DeceiveIncMatchGameState
+     1  DeceiveIncMenuGameModeBase
+     1  DeceiveIncPlayerBotController
+     1  DeceiveIncPlayerController
+     1  DeceiveIncPlayerVoiceChat
+     1  DeceiveIncPreGameState
+     1  DeceiveIncPrivateLobbyGameMode
+     1  DeceiveIncSettings
+     1  DefaultCameraShakeBase
+    19  DiSpy3PMovementSet
+     1  DiSpyAnimInstance1P
+     1  DiSpyAnimInstance3P
+     7  DiSpyAnimationMotionSet
+     1  DirectionalDamageIndicatorWidget
+   724  DisguiseAsNPCConditionComponent
+   108  DoorClosedConditionComponent
+     1  DroneSpawnerWeapon
+     1  EditableGameplayTagQueryExpression_AllExprMatch
+     1  EditableGameplayTagQueryExpression_AllTagsMatch
+     1  EditableGameplayTagQueryExpression_AnyExprMatch
+     1  EditableGameplayTagQueryExpression_AnyTagsMatch
+     1  EditableGameplayTagQueryExpression_NoExprMatch
+     1  EditableGameplayTagQueryExpression_NoTagsMatch
+     1  EmitterCameraLensEffectBase
+     1  EndMatchCallbackProxy
+     1  ExtractionArrivedPhaseInfo
+     1  ExtractionArrivingPhaseInfo
+     1  ExtractionInteractableActor
+    24  FallDamageComponent
+     1  FindTurnBasedMatchCallbackProxy
+    13  GadgetData
+     1  GadgetInterface
+     1  GameMode
+     1  GameModeBase
+    73  GamePhaseConditionComponent
+     1  GameState
+     1  GameStateBase
+     1  GameplayTask_SpawnActor
+  1351  GenericNPCInteraction
+     1  GenericTeamAgentInterface
+     2  HUD_AnnouncementPhaseChange_C
+     2  HUD_ChangeAgentTAB_C
+     2  HUD_CurrentObjectiveTip_C
+     2  HUD_CurrentObjective_C
+     2  HUD_DamageFeedback_C
+     1  HUD_DirectionalDamageIndicator_C
+     2  HUD_InteractTooltip_C
+     1  HUD_Interact_ScanMimicable_C
+     1  HUD_Interact_ScanTrappable_C
+     3  HUD_Interactable_C
+     2  HUD_LoadoutButtonWPN_C
+     3  HUD_LoadoutButton_C
+     2  HUD_Loadout_Master_C
+     1  HUD_NavMode_HealthCharge_C
+     1  HUD_NavMode_Health_C
+     1  HUD_NavMode_Objective_C
+     1  HUD_NavMode_VaultDoor_C
+     1  HUD_NavMode_VaultLocation_Unknown_C
+     1  HUD_ObjectiveHolderEnemies_C
+     1  HUD_PP_Vault_C
+     2  HUD_PlayerHealth_C
+     2  HUD_PlayerObjective_C
+     2  HUD_SE_ObjectivePing_TImer_C
+     2  HUD_VaultCounter_C
+     1  HUD_VaultPrinterScreen_C
+     1  HUD_VaultTimer_C
+     1  HUD_WeaponADS_Octo_MOD0_C
+     1  HansActiveAbility
+     1  HansActiveAbilityMod1
+     1  HansActiveAbilityMod2
+     1  HansPassiveAbility
+     1  HansPassiveAbilityMod1
+     1  HansPassiveAbilityMod2
+  1804  HealthComponent
+     1  HealthConditionComponent
+     1  HealthSnapshotBlueprintLibrary
+     1  HitscanWeapon
+     1  HoudiniInputCameraComponent
+     1  ImpulseWeaponComponent
+     1  InteractableActorInterface
+  4119  InteractableComponent
+    25  InteracterComponent
+    11  InteractionAuthorityComponent
+    10  InteractionIconComponent
+     1  InteractionIconWidget
+     1  InteractionMechanic
+     1  InteractiveFoliageActor
+     2  InteractiveFoliageComponent
+     1  InteractiveGizmo
+     1  InteractiveGizmoBuilder
+     1  InteractiveGizmoManager
+     1  InteractiveTool
+     1  InteractiveToolBuilder
+     1  InteractiveToolManager
+     1  InteractiveToolPropertySet
+     1  InteractiveToolsContext
+     1  InterpGroupCamera
+     1  InterpGroupInstCamera
+     1  IntroPhaseInfo
+     1  LarcinActiveAbility
+     1  LarcinActiveMod1Ability
+     1  LarcinPassiveAbility
+     1  LarcinPassiveMod1Ability
+     1  LarcinPassiveMod1_2Ability
+     4  LimitedEventXpProgressionData
+     2  LocalSpyEventBus
+     2  LootRewardPoolDataAsset
+    11  MapData
+     1  Matchmaker
+     2  MatchmakerImpl
+     1  MaterialExpressionCameraPositionWS
+     1  MaterialExpressionCameraVectorWS
+     1  MaterialExpressionMapARPassthroughCameraUV
+     1  MatineeActorCameraAnim
+     1  MatineeCameraShake
+     1  MatineeCameraShakeFunctionLibrary
+     2  MatineeCameraShakePattern
+     1  MaxHealthConditionComponent
+     1  MeleeWeapon
+     1  MovieSceneCameraAnimSection
+     1  MovieSceneCameraAnimTrack
+     3  MovieSceneCameraCutSection
+     3  MovieSceneCameraCutTrack
+     1  MovieSceneCameraCutTrackInstance
+     1  MovieSceneCameraShakeEvaluator
+     1  MovieSceneCameraShakeSection
+     1  MovieSceneCameraShakeSourceShakeSection
+     1  MovieSceneCameraShakeSourceShakeTrack
+     1  MovieSceneCameraShakeSourceTriggerSection
+     1  MovieSceneCameraShakeSourceTriggerTrack
+     1  MovieSceneCameraShakeTrack
+     1  MovieSceneMatineeCameraShakeEvaluator
+    11  MovieSceneNiagaraSystemSpawnSection
+     1  MovieScenePostSpawnEventSystem
+     1  MovieScenePreSpawnEventSystem
+    20  MovieSceneSpawnSection
+    20  MovieSceneSpawnTrack
+     1  MovieSceneSpawnablesSystem
+     1  NPCAIActor
+     1  NPCAdditionalComponent
+     1  NPCBehavior
+   657  NPCBehaviorControlled
+   657  NPCBehaviorDefault
+   127  NPCBehaviorFollow
+   657  NPCBehaviorInteract
+   127  NPCBehaviorInvestigate
+   657  NPCBehaviorScared
+   339  NPCBehaviorScold
+     1  NPCBug
+     1  NPCBugSpawnerWeapon
+     1  NPCCharacter
+   200  NPCContainerInteraction
+    10  NPCConversationComponent
+     9  NPCConversationInteraction
+   130  NPCGuardComponent
+     1  NPCInteraction
+  1456  NPCInteractionComponent
+   724  NPCMotionSetComponent
+   724  NPCMovementComponent
+     1  NavAgentInterface
+     1  NavAreaMeta_SwitchByAgent
+     1  NiagaraDataInterfaceCamera
+     1  NiagaraEventReceiverEmitterAction_SpawnParticles
+     1  ObjectSpawn
+   304  ObjectSpawnComponent
+     1  ObjectSpawnInterface
+     1  ObjectSpawningManager
+     1  ObjectiveCarrierVictimEffect
+     2  ObjectiveProximityData
+     2  ObjectiveProximitySubsystem
+     1  OctoActiveAbility
+     1  OctoActiveAbilityMod1
+     1  OctoActiveAbilityMod2
+     1  OctoBaseActiveAbility
+     1  OctoDrainingActiveAbility
+     1  OctoPassiveAbility
+     1  OctoPassiveAbilityLuckBased
+     1  OctoPassiveAbilityMod1
+     1  OctoPassiveAbilityMod2
+     1  ParticleModuleCameraBase
+     1  ParticleModuleCameraOffset
+     1  ParticleModuleEventReceiverSpawn
+     1  ParticleModuleSpawn
+     1  ParticleModuleSpawnBase
+     1  ParticleModuleSpawnPerUnit
+     1  PathFollowingAgentInterface
+     2  PerlinNoiseCameraShakePattern
+     2  PlayableAgentList
+     2  PlayerCameraManager
+     1  PopulationManager
+     1  PosingSpy
+    17  PosingSpyActorContainer
+     1  PosingSpyAnimInstance
+     1  PosingSpy_Lightrig_Blueprint_C
+     2  PowerupData
+    11  PowerupManagerComponent
+     2  PregameLobbyMapData
+     1  PregameLobbyPhaseInfo
+     1  ProceduralFoliageSpawner
+     6  ProgressionRewardData
+     1  ProjectileSpawnedActorInterface
+     1  ProjectileWeapon
+     1  QuitMatchCallbackProxy
+     3  RangeInteracterComponent
+     1  ResultScreenPhaseInfo
+    24  ReviveSpyConditionComponent
+     2  RewardBundleDataAsset
+     1  RoomNavArea_Guard
+     2  SM_GunShelf_Door_A_01_Shortcut_C
+     1  SasoriActiveAbility
+     1  SasoriActiveAbilityMod1
+     1  SasoriActiveAbilityMod2
+     1  SasoriBaseActiveAbility
+     1  SasoriPassiveAbility
+     1  SasoriPassiveAbilityMod1
+     1  SasoriPassiveAbilityMod2
+     2  SequenceCameraShakeCameraStandIn
+     1  SequenceCameraShakePattern
+     2  SequenceCameraShakeSequencePlayer
+     1  SessionAgentSelectionInfo
+     1  ShieldbrellaSpawnerWeapon
+     1  SimpleCameraShakePattern
+  1376  SocialInteractConditionComponent
+     1  SocialiteActiveAbility
+     1  SocialiteActiveAbilityMod1
+     1  SocialiteActiveAbilityMod2
+     1  SocialitePassiveAbility
+     1  SocialitePassiveAbilityMod1
+     1  SocialitePassiveAbilityMod2
+     1  SourceEffectPhaserPreset
+     1  SpawnableObjectInterface
+     1  SpawnerWeapon
+     1  SpawnerWeaponInterface
+     1  SpawnerWeaponRound
+     1  SpawnerWeaponRound_Beam
+     1  SpawnerWeaponRound_Charge
+     1  SpawnerWeaponRound_Projectile
+     1  SpawnerWeaponRound_Shield
+     1  SprayChargeSpawnerWeapon
+     1  SprayWeapon
+     1  Spy
+     1  Spy3DPortrait
+     1  SpyCache
+     1  SpyCheatsComponent
+     9  SpyGameModeMapData
+     1  SpyGamePhaseInfo
+     1  SpyGlassTool
+     1  SpyPack
+     1  SpyPing
+     1  SpyWeaponInterface
+     1  SquireActiveAbility
+     1  SquireActiveAbilityMod2
+     1  SquirePassiveAbility
+     1  SquirePassiveAbilityMod1
+     1  SquirePassiveAbilityMod2
+     1  TestCameraShake
+     5  ThrowableWeapon
+    24  ToolLoadoutComponent
+     1  Tripwire
+     2  TripwireDedicatedServerManager
+     1  TripwireServerSettings
+     1  TripwireTool
+     1  TurnBasedMatchInterface
+     1  TwMatchDataAggregator
+     6  VaultDoorOverrideCondition
+     2  VaultLockedPhaseInfo
+     1  VaultUnlockedPhaseInfo
+     1  VictimEffectTickBehavior_Damage
+     1  VictimEffectTickBehavior_InstantDamage
+     1  VigilActiveAbility
+     1  VigilPassiveAbilityDeviceBased
+     1  WaveOscillatorCameraShakePattern
+     1  WeaponOverheatComponent
+     4  WeaponSprayDataAsset
+     1  WidgetInteractionComponent
+     1  XiuActiveAbility
+     1  XiuPassiveAbility
+     1  XiuPassiveAbilityMod1
+     1  XiuPassiveAbilityMod2
+     4  XpProgressionData
+     1  YumiActiveAbility
+     1  YumiPassiveAbility
+     1  YumiPassiveAbilityMod1
+     1  YumiPassiveAbilityMod2
+
+---- scalar properties per class ('<==' = looks tunable) ----
+
+=== AISense_Damage   x1
+      DefaultExpirationAge = 3.4028234663853e+38
+
+=== AOEWeaponComponent   x1
+  <== AOEDamage = 10.0
+
+=== ARSharedWorldGameMode   x1
+  <== BufferSizePerChunk = 512
+
+=== ARTextureCameraDepth   x1
+      DepthQuality = 0
+      TextureType = 2
+  <== ForceMipLevelsToBeResidentTimestamp = 0.0
+
+=== ARTextureCameraImage   x1
+      TextureType = 1
+  <== ForceMipLevelsToBeResidentTimestamp = 0.0
+
+=== AYumiPassiveAbilityMod1_2   x1
+  <== PercentRefunded = 10.0
+
+=== AceTrailActiveAbility   x1
+      TrailVFXLookAheadDist = 100.0
+
+=== ActiveAbilityConditionComponent   x3381
+  <== bCanInteractWhenInMimic = true
+      Restrictions = 0
+
+=== AgentData   x14
+      Difficulty = 0
+
+=== AnimNotify_GuardSetWeaponVisibility_C   x5
+      Visibility = false
+
+=== AnimNotify_SpyDespawnProp_C   x12
+      FirstPerson = true
+
+=== BPProj_ThrowableWeapon_Larcin_C   x1
+  <== FullyChargeSpeed = 0.0
+  <== MaximumTimeToLive = 1.5
+
+=== BPProj_ThrowableWeapon_Larcin_Mod1_C   x1
+  <== FullyChargeSpeed = 0.0
+  <== MaximumTimeToLive = 1.5
+
+=== BPProjectile_ChargeSpawnerWeapon_Base_C   x1
+  <== FullyChargeSpeed = 2000.0
+  <== MaximumTimeToLive = 6.0
+
+=== BPProjectile_SpawnerWeapon_Base_C   x1
+  <== MaximumTimeToLive = 6.0
+
+=== BPWeapon_Chavez_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Hans_ADS_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Hans_ADS_Mod2_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Hans_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Hans_Mod2_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_HitscanBase_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Larcin_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Larcin_Mod1_C   x3
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Octo_C   x2
+  <== EffectiveRange = 20000.0
+
+=== BPWeapon_SprayBase_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Squire_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Squire_Mod1_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Xiu_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BPWeapon_Xiu_Mod1_C   x2
+  <== EffectiveRange = 10000.0
+
+=== BP_BaseDoorActor_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_CameraLense_C   x2
+      AutoActivateForPlayer = 0
+
+=== BP_Container_OrangeCardSpawnerHS_C   x1
+  <== bAllowNPCInteraction = true
+
+=== BP_Container_PurpleCardSpawnerHS_C   x3
+  <== bAllowNPCInteraction = true
+
+=== BP_Container_PurpleCardSpawnerSE_C   x1
+  <== bAllowNPCInteraction = true
+
+=== BP_DamageModifier_Ace_Active_Mod1_C   x3
+  <== Multipliers = 1.1200000047684
+
+=== BP_DamageModifier_DisguiseShield_Disguise_C   x9
+  <== Multipliers = 1.0
+
+=== BP_DamageModifier_DisguiseShield_Spy_C   x9
+  <== Multipliers = 1.0
+
+=== BP_DamageType_Fall_C   x1
+      bCausedByWorld = true
+
+=== BP_DeceiveIncBotController_C   x8
+      bStartAILogicOnPossess = false
+
+=== BP_DoorDiamondSpire_Emergency_C   x3
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Blue_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Green_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Orange_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorLab_Purple_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorManor_C   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Blue_C   x15
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_C   x18
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Green_C   x9
+      bAppearAsLocallyUnlocked = false
+
+=== BP_DoorSR_Purple_C   x6
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Blue_C   x5
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Orange_C   x4
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Door_Starfish_Purple_C   x8
+      bAppearAsLocallyUnlocked = false
+
+=== BP_EliteGuardWeapon_C   x14
+  <== EffectiveRange = 10000.0
+
+=== BP_GuardWeapon_C   x41
+  <== EffectiveRange = 10000.0
+
+=== BP_ObjectSpawningManager_C   x2
+  <== FillingObjectsMaxWeightFactor = 45.0
+
+=== BP_SRDoorBathroom_C   x31
+      bAppearAsLocallyUnlocked = false
+
+=== BP_Spy_SpyPack_C   x49
+  <== HealthCount = 25
+
+=== BP_UltraGuardWeapon_C   x1
+  <== EffectiveRange = 10000.0
+
+=== BP_VaultDoorBase_C   x1
+      bShouldDoAnimNotifies = true
+
+=== BP_VaultDoorSr_C   x5
+      bShouldDoAnimNotifies = true
+
+=== BP_VictimEffect_HansActive_Guard_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_HansActive_Spy_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_ObjectiveCarrierPing_C   x1
+  <== PostPingCooldown = 1.0
+      EffectPositioningRule = 0
+
+=== BP_VictimEffect_ObjectiveEnemyPing_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_CameraDrain_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Broadcast_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Drain_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Status_VaultZone_Exposed_C   x1
+      EffectPositioningRule = 2
+
+=== BP_VictimEffect_Vulnerable_RogueAgent_C   x1
+      EffectPositioningRule = 2
+
+=== BaseDoorActor   x1
+      bAppearAsLocallyUnlocked = false
+
+=== BotSpawner   x1
+      bAutoSpawnOnStart = false
+
+=== CameraActor   x38
+      AutoActivateForPlayer = 0
+
+=== CameraBlockingVolume   x1
+      BrushType = 0
+
+=== CameraComponent   x93
+      FieldOfView = 90.0
+
+=== CameraModifier   x1
+      bDebug = false
+
+=== CameraModifier_CameraShake   x2
+      bDebug = false
+
+=== CameraRig_Crane   x1
+      CranePitch = 0.0
+
+=== CameraRig_Rail   x1
+      CurrentPositionOnRail = 0.0
+
+=== CameraShakeBase   x1
+      bSingleInstance = false
+
+=== CameraShakeSourceComponent   x2
+      Attenuation = 1
+
+=== CavActiveInteracterComponent   x2
+  <== RangeInteractDistance = 2500.0
+
+=== CavalierePassiveAbilityMod2   x1
+  <== MinMeleeChargeLevel = 0
+
+=== ChangePhaseComponent   x3
+      NextPhase = 0
+
+=== ChavezActiveAbilityMod1   x1
+      CurrentWeaponBuff = 0.0
+
+=== ChavezActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== ChavezActiveAbilityMod2_1   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== ChavezPassiveAbilityMod1   x1
+  <== MaxOverhealAmmount = 50.0
+
+=== CineCameraActor   x18
+      AutoActivateForPlayer = 0
+
+=== CineCameraComponent   x19
+      FieldOfView = 27.953815460205
+
+=== ConstantCameraShakePattern   x1
+  <== Duration = 1.0
+
+=== DIActiveAbilityItem   x73
+      ItemId = -1
+
+=== DIAgentBundleItem   x3
+      ItemId = -1
+
+=== DIAgentItem   x29
+      ItemId = -1
+
+=== DIAgentSkinItem   x1545
+      ItemId = -1
+
+=== DIAvatarItem   x275
+      ItemId = -1
+
+=== DIBundleItem   x177
+      ItemId = -1
+
+=== DICCItem   x173
+      ItemId = -1
+
+=== DICameraLense   x1
+      AutoActivateForPlayer = 0
+
+=== DICatalogueItem   x11
+      ItemId = -1
+
+=== DIConsumableItem   x3
+      ItemId = -1
+
+=== DICurrencyItem   x7
+      ItemId = -1
+
+=== DIFreeSpectator   x1
+  <== BaseTurnRate = 45.0
+
+=== DIGadgetItem   x29
+      ItemId = -1
+
+=== DIIntroPoseItem   x351
+      ItemId = -1
+
+=== DIItem   x1
+      ItemId = -1
+
+=== DILootItem   x1
+      ItemId = -1
+
+=== DIMenuStoreShowcaseWidget   x1
+      bHasVariation = false
+
+=== DIOnlineFriendPresence   x2
+  <== bIsOnline = false
+
+=== DIPassiveAbilityItem   x75
+      ItemId = -1
+
+=== DIPingWidget   x1
+      bFollowPosition = false
+
+=== DIPlayerState   x9
+      Score = 0.0
+
+=== DIProgressionItem   x1
+      ItemId = -1
+
+=== DISelectFactionEntryWidget   x1
+      PortraitStyle = 1
+
+=== DIServerBrowserMenuWidget   x1
+      AutoRefreshIntervalSeconds = 15.0
+
+=== DIServerInfoRowWidget   x1
+      bSelected = false
+
+=== DISpectatorPawn   x1
+  <== BaseTurnRate = 90.0
+
+=== DIStoreMenuPageUserWidget   x1
+  <== StoreRefreshDelay = 0.5
+
+=== DITitleItem   x291
+      ItemId = -1
+
+=== DIUserWidget   x1
+      bFollowPosition = false
+
+=== DIVoucherItem   x301
+      ItemId = -1
+
+=== DIWeaponItem   x73
+      ItemId = -1
+
+=== DIWidgetComponent   x198
+      bOnlyTickWhenVisible = true
+      Space = 0
+  <== MinDrawDistance = 0.0
+
+=== DIWrapItem   x557
+      ItemId = -1
+
+=== DamageModifier   x2
+  <== Multipliers = 1.0
+
+=== DamageNumber   x1
+  <== DamageValue = 0.0
+
+=== DamageType   x1
+      bCausedByWorld = false
+
+=== DebugCameraController   x1
+      bShowSelectedInfo = true
+
+=== DeceiveIncBotController   x1
+      bStartAILogicOnPossess = false
+
+=== DeceiveIncEngine   x2
+  <== MaxDeltaTime = 0.0
+
+=== DeceiveIncGameSession   x2
+  <== MaxSpectators = 2
+
+=== DeceiveIncPlayerBotController   x1
+      bStartAILogicOnPossess = false
+
+=== DeceiveIncSettings   x1
+  <== bIsPlaytestBuild = false
+
+=== DefaultCameraShakeBase   x1
+      bSingleInstance = false
+
+=== DisguiseAsNPCConditionComponent   x724
+      Restrictions = 0
+
+=== DoorClosedConditionComponent   x108
+      Restrictions = 0
+
+=== DroneSpawnerWeapon   x1
+      WallOffset = 34.0
+  <== EffectiveRange = 10000.0
+
+=== ExtractionInteractableActor   x1
+  <== ZoneTimeToExtract = 8.0
+
+=== GamePhaseConditionComponent   x73
+      Restrictions = 0
+
+=== HUD_InteractTooltip_C   x2
+      bFollowPosition = false
+
+=== HUD_Interact_ScanMimicable_C   x1
+  <== bIsRepeatableInteraction = false
+
+=== HUD_Interact_ScanTrappable_C   x1
+  <== bIsRepeatableInteraction = false
+
+=== HUD_Interactable_C   x3
+  <== bIsRepeatableInteraction = false
+
+=== HUD_NavMode_HealthCharge_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_Health_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_Objective_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_VaultDoor_C   x1
+      bFollowPosition = true
+
+=== HUD_NavMode_VaultLocation_Unknown_C   x1
+      bFollowPosition = true
+
+=== HUD_ObjectiveHolderEnemies_C   x1
+      bFollowPosition = true
+
+=== HUD_PP_Vault_C   x1
+      bFollowPosition = false
+
+=== HUD_SE_ObjectivePing_TImer_C   x2
+      bFollowPosition = false
+
+=== HansActiveAbility   x1
+  <== EffectiveAimRange = 10000.0
+
+=== HansActiveAbilityMod1   x1
+  <== EffectiveAimRange = 10000.0
+
+=== HansActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== HansPassiveAbilityMod2   x1
+  <== PercentRefunded = 10.0
+
+=== HealthComponent   x1804
+      FactionID = 255
+
+=== HealthConditionComponent   x1
+  <== HealthAmount = 0.15000000596046
+      Restrictions = 0
+
+=== HitscanWeapon   x1
+  <== EffectiveRange = 10000.0
+
+=== HoudiniInputCameraComponent   x1
+      FOV = 0.0
+
+=== ImpulseWeaponComponent   x1
+      AimImpulse = -1000.0
+
+=== InteractionIconComponent   x10
+      bOnlyTickWhenVisible = true
+      Space = 0
+  <== MinDrawDistance = 0.0
+
+=== InteractionIconWidget   x1
+  <== bIsRepeatableInteraction = false
+
+=== InteractiveFoliageComponent   x2
+      ForcedLodModel = 0
+  <== MinDrawDistance = 0.0
+
+=== LarcinActiveAbility   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== LarcinActiveMod1Ability   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== LimitedEventXpProgressionData   x4
+  <== MinLvlToCheckForXpOverflow = 10
+
+=== MatineeCameraShake   x1
+  <== OscillationDuration = 0.0
+      bSingleInstance = false
+
+=== MaxHealthConditionComponent   x1
+  <== MaxHealthAmount = 0.15000000596046
+      Restrictions = 0
+
+=== MeleeWeapon   x1
+      bDisableBaseMeleeOnUse = true
+
+=== MovieSceneCameraCutSection   x3
+      bLockPreviousCamera = false
+
+=== MovieSceneCameraCutTrack   x3
+  <== bCanBlend = false
+
+=== MovieSceneNiagaraSystemSpawnSection   x11
+      SectionStartBehavior = 0
+
+=== MovieSceneSpawnSection   x20
+      DefaultValue = false
+
+=== NPCBehaviorDefault   x657
+  <== ChancesToInteract = 28.0
+
+=== NPCBehaviorFollow   x127
+  <== FollowDistZMin = 100.0
+
+=== NPCConversationComponent   x10
+  <== MaxNPCInConversation = 5
+      bLookingTowardInteract = false
+
+=== NPCGuardComponent   x130
+      bInvestigatingSpy = false
+
+=== NPCInteractionComponent   x1456
+      bLookingTowardInteract = false
+
+=== NavAreaMeta_SwitchByAgent   x1
+      DefaultCost = 1.0
+
+=== NiagaraDataInterfaceCamera   x1
+      PlayerControllerIndex = 0
+
+=== NiagaraEventReceiverEmitterAction_SpawnParticles   x1
+  <== NumParticles = 0
+
+=== ObjectSpawningManager   x1
+  <== FillingObjectsMaxWeightFactor = 4.0
+
+=== ObjectiveCarrierVictimEffect   x1
+  <== PostPingCooldown = 1.0
+      EffectPositioningRule = 2
+
+=== OctoActiveAbility   x1
+  <== DetectionRange = 2500.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoActiveAbilityMod1   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoActiveAbilityMod2   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoBaseActiveAbility   x1
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoDrainingActiveAbility   x1
+      IntelDrainInterval = 1.0
+  <== OctoEffectDelay = 0.10000000149012
+
+=== OctoPassiveAbility   x1
+      ResourceTypeToCheck = 3
+
+=== OctoPassiveAbilityLuckBased   x1
+      bTriggersOnIntelSpent = true
+
+=== OctoPassiveAbilityMod1   x1
+  <== PercentChances_IntelMissing1 = 10.0
+      bTriggersOnIntelSpent = true
+
+=== OctoPassiveAbilityMod2   x1
+  <== PercentChancesToRefillActive = 10.0
+      bTriggersOnIntelSpent = true
+
+=== ParticleModuleCameraBase   x1
+      bSpawnModule = false
+
+=== ParticleModuleCameraOffset   x1
+      bSpawnModule = true
+
+=== ParticleModuleEventReceiverSpawn   x1
+      EventGeneratorType = 0
+      bSpawnModule = true
+
+=== ParticleModuleSpawn   x1
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== ParticleModuleSpawnBase   x1
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== ParticleModuleSpawnPerUnit   x1
+      UnitScalar = 50.0
+  <== bProcessSpawnRate = true
+      bSpawnModule = false
+
+=== PerlinNoiseCameraShakePattern   x2
+  <== LocationAmplitudeMultiplier = 1.0
+  <== Duration = 1.0
+
+=== ProceduralFoliageSpawner   x1
+      RandomSeed = 42
+
+=== RangeInteracterComponent   x3
+  <== RangeInteractDistance = 2500.0
+
+=== ReviveSpyConditionComponent   x24
+  <== CurrentReviveCount = 0
+      Restrictions = 0
+
+=== RoomNavArea_Guard   x1
+      DefaultCost = 1.0
+
+=== SasoriActiveAbilityMod2   x1
+  <== TriggerDelay = 0.40000000596046
+
+=== SequenceCameraShakeCameraStandIn   x2
+      FieldOfView = 0.0
+
+=== SimpleCameraShakePattern   x1
+  <== Duration = 1.0
+
+=== SocialInteractConditionComponent   x1376
+      Restrictions = 0
+
+=== SocialitePassiveAbilityMod1   x1
+  <== PassiveRange = 2000.0
+
+=== SpawnerWeaponRound_Charge   x1
+  <== FullyChargeSpeed = 2000.0
+  <== MaximumTimeToLive = 6.0
+
+=== SpawnerWeaponRound_Projectile   x1
+  <== MaximumTimeToLive = 6.0
+
+=== SprayWeapon   x1
+  <== EffectiveRange = 10000.0
+
+=== SpyPack   x1
+  <== HealthCount = 30
+
+=== SquireActiveAbility   x1
+  <== DetectionRange = 3000.0
+
+=== SquireActiveAbilityMod2   x1
+  <== EffectRange = 2500.0
+
+=== SquirePassiveAbility   x1
+  <== SpeedBoostDuration = 3.0
+
+=== SquirePassiveAbilityMod1   x1
+  <== PingDuration = 3.0
+
+=== TestCameraShake   x1
+      bSingleInstance = false
+
+=== VaultDoorOverrideCondition   x6
+      RequiredIntel = 30
+      Restrictions = 0
+
+=== VictimEffectTickBehavior_Damage   x1
+  <== Damage = 0.0
+
+=== VictimEffectTickBehavior_InstantDamage   x1
+  <== Damage = 0.0
+
+=== WaveOscillatorCameraShakePattern   x1
+  <== LocationAmplitudeMultiplier = 1.0
+  <== Duration = 1.0
+
+=== WeaponOverheatComponent   x1
+      HeatIncreasePerShot = 0.10000000149012
+
+=== XiuPassiveAbility   x1
+  <== DetectionRange = 3000.0
+
+=== XiuPassiveAbilityMod1   x1
+      LoSDistance = 14440000.0
+
+=== XpProgressionData   x4
+  <== MinLvlToCheckForXpOverflow = 10
+
+=== YumiPassiveAbility   x1
+  <== GadgetsPercentCooldownReduction = 0.5
+
+=== YumiPassiveAbilityMod1   x1
+  <== HealthBuff = 0.5
+
+################ END ################

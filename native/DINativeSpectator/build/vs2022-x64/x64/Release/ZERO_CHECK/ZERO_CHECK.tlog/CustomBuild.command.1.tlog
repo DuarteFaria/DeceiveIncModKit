@@ -1,0 +1,10 @@
+^C:\USERS\DUARTE\DECEIVEINCMODKIT\NATIVE\DINATIVESPECTATOR\BUILD\VS2022-X64\CMAKEFILES\6C4413BCF1F3ABDE48C880201FE5531E\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Duarte/DeceiveIncModKit/native/DINativeSpectator -BC:/Users/Duarte/DeceiveIncModKit/native/DINativeSpectator/build/vs2022-x64 --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/Duarte/DeceiveIncModKit/native/DINativeSpectator/build/vs2022-x64/DINativeSpectator.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

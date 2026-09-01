@@ -1,0 +1,20 @@
+{
+  "description": "Death-spectate test: 8 Solo slots, fast lobby. Die to enter the normal spectator UI.",
+  "mods": {
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False"
+  }
+}

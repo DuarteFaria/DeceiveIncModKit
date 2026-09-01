@@ -1,0 +1,21 @@
+{
+  "description": "Stock solo: 8 players. Hard-clamped to 8 by the server.",
+  "mods": {
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "8",
+    "bIsPublic": "False"
+  }
+}

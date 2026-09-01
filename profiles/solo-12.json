@@ -1,0 +1,22 @@
+{
+  "description": "12-player Solo using the memory-only server launcher. EOS browser may still show 8 slots.",
+  "launch_mode": "solo12",
+  "mods": {
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "12",
+    "BotsAmount": "11",
+    "bIsPublic": "False"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "description": "12 players (4 teams of 3). The stock mode that reaches 12 without a runtime patch.",
+  "mods": {
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "GameMode": "Trio",
+    "MaxPlayers": "12",
+    "BotsAmount": "8",
+    "bIsPublic": "False"
+  }
+}
