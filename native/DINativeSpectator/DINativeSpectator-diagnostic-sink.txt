@@ -1,1 +1,0 @@
-FPlatformMisc::RequestExitWithStatus(1, 3)

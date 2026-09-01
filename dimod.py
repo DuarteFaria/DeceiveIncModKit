@@ -17,6 +17,26 @@ The kit is the source of truth. Nothing is authored inside the game folder;
   python dimod.py trigger-stage2      toggle the natural-death spectator route
   python dimod.py arm-stage2-spectator
                                       make the next connection a spectator
+  python dimod.py force-death         kill your deployed spy -> native spectator
+  python dimod.py trigger-native-freemove
+                                      toggle the game's native free<->follow spectator
+  python dimod.py native-invoke <free|follow>
+                                      Gate A: call the spectator toggle UFunction
+                                      via the Stage 3 game-thread invoker (DLL)
+  python dimod.py native-trace <arm|off>
+                                      arm/clear the Stage 3 spectate RPC tracer
+  python dimod.py trigger-extraction [player]
+                                      arm the carrier-extraction mode; optional
+                                      player-name substring picks the carrier
+  python dimod.py extraction-recon    dump live extraction/objective state
+  python dimod.py grant-loadout [player|all]
+                                      fill intel, keycards, powerup chips and
+                                      every gadget charge on a deployed spy
+  python dimod.py disguise <tier|colour|off> [player]
+                                      give an NPC disguise clearance, re-applied
+                                      on deploy (purple = technician)
+  python dimod.py rescue [player]     teleport a player who fell out of the
+                                      world back onto solid ground
 """
 import json, os, shutil, subprocess, sys, time
 
@@ -42,6 +62,9 @@ STATE = os.path.join(KIT, ".deployed.json")
 MANAGED_TRIPWIRE_KEYS = {
     "GameMode", "MaxPlayers", "BotsAmount", "BotsDifficulty",
     "MapRotation", "bIsPublic", "bIsOfficial", "AutoShutdownEmptyMinutes",
+    # UTripwireServerSettings also ships a sandbox surface; managed here so a
+    # profile switch can never leave sandbox silently enabled.
+    "bSandboxMode", "bFillWithBots", "bRandomizeMap",
 }
 
 # UE4SS's own bundled mods - left alone by vanilla, they came with the zip
@@ -300,7 +323,18 @@ def cmd_apply(name):
     for transient in ("DINativeSpectator.stage1-trigger",
                       "DINativeSpectator.stage2-trigger",
                       "DINativeSpectator.next-dedicated",
-                      "DINativeSpectator.readiness-override"):
+                      "DINativeSpectator.readiness-override",
+                      "DINativeSpectator.force-death",
+                      "DINativeSpectator.native-freemove",
+                      "DINativeSpectator.invoke-request",
+                      "DINativeSpectator.invoke",
+                      "DINativeSpectator.trace-request",
+                      "DINativeSpectator.trace",
+                      "DIExtraction.trigger",
+                      "DIExtraction.recon",
+                      "DIExtraction.loadout",
+                      "DIExtraction.disguise",
+                      "DIExtraction.rescue"):
         transient_path = os.path.join(WIN64, transient)
         if os.path.isfile(transient_path):
             os.remove(transient_path)
@@ -447,7 +481,8 @@ def cmd_launch(mode=None):
     profile = profiles().get(active, {})
     native_modules = profile.get("native_modules", [])
     launch_env = os.environ.copy()
-    if any(m in ("DINativeSpectatorStage1", "DINativeSpectatorStage2")
+    if any(m in ("DINativeSpectatorStage1", "DINativeSpectatorStage2",
+                 "DINativeSpectatorStage3")
            for m in native_modules):
         launch_env["DIMOD_POST_INJECT_WAIT"] = "0.25"
     r = subprocess.run([exe, inject, "--launch"], capture_output=True, text=True,
@@ -462,7 +497,7 @@ def cmd_launch(mode=None):
     # Native DLLs are opt-in and profile-gated. Ordinary profiles have no
     # native_modules key, so the native loader is never invoked for them.
     if any(m in ("DINativeSpectator", "DINativeSpectatorStage1",
-                 "DINativeSpectatorStage2")
+                 "DINativeSpectatorStage2", "DINativeSpectatorStage3")
            for m in native_modules):
         loader = os.path.join(KIT, "tools", "load_native_spectator.py")
         native = subprocess.run([exe, loader], capture_output=True, text=True)
@@ -545,6 +580,106 @@ def cmd_trigger_stage2(mode=None):
     return 0
 
 
+def cmd_force_death():
+    """Option C: kill the human's deployed spy so the untouched client drops
+    into the game's native death-spectator flow (spectator HUD + A/D follow)."""
+    if load_state().get("profile") != "native-spectator-stage2":
+        print(c("r", "  refused: native-spectator-stage2 is not active"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DINativeSpectator.force-death")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write("FORCE DEATH\n")
+    except FileExistsError:
+        print(c("r", "  refused: a force-death request is already pending"))
+        return 1
+    print(c("y", f"  force-death armed: your deployed spy will be killed on pid {pid}"))
+    return 0
+
+
+def cmd_trigger_native_freemove():
+    """Gate A: toggle the game's own free<->follow spectator via its native
+    functions (CheatSpectateFreeMoveSrv / ServerReturnToPlayer), picked by the
+    current pawn. Run once to go free, again to return to follow."""
+    if load_state().get("profile") != "native-spectator-stage2":
+        print(c("r", "  refused: native-spectator-stage2 is not active"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DINativeSpectator.native-freemove")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write("NATIVE FREEMOVE\n")
+    except FileExistsError:
+        print(c("r", "  refused: a native-freemove toggle is already pending"))
+        return 1
+    print(c("y", f"  native free<->follow toggle armed on pid {pid}"))
+    return 0
+
+
+def cmd_native_invoke(direction=None):
+    """Gate A via the native game-thread invoker (Stage 3 DLL). Asks the Lua
+    resolver to look up the live spectator pawn and the target UFunction, then
+    the DLL calls it through UObject::ProcessEvent on the game thread:
+      free   -> DISpectatorPawn:CheatSpectateFreeMoveSrv  (follow -> free)
+      follow -> DIFreeSpectator:ServerReturnToPlayer      (free -> follow)
+    Run after a DebugFreecam return has spawned a fresh acknowledged spectator
+    pawn (the case the earlier reflected path never reached)."""
+    if load_state().get("profile") != "native-spectator-stage2":
+        print(c("r", "  refused: native-spectator-stage2 is not active"))
+        return 1
+    if direction not in ("free", "follow"):
+        print(c("r", "  usage: dimod.py native-invoke <free|follow>"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DINativeSpectator.invoke-request")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write(direction + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: a native-invoke request is already pending"))
+        return 1
+    print(c("y", f"  native-invoke '{direction}' requested; Lua resolver will "
+                 f"emit the invoke marker on pid {pid}"))
+    return 0
+
+
+def cmd_native_trace(mode=None):
+    """Arm or clear the Stage 3 spectate tracer. When armed, the Lua resolver
+    writes the watched UFunction addresses plus an object byte-range into
+    DINativeSpectator.trace; the DLL then logs each matching ProcessEvent call
+    with a hexdump of that range, for diffing spectator state across
+    natural-follow / freecam / post-return."""
+    if load_state().get("profile") != "native-spectator-stage2":
+        print(c("r", "  refused: native-spectator-stage2 is not active"))
+        return 1
+    if mode not in ("arm", "off"):
+        print(c("r", "  usage: dimod.py native-trace <arm|off>"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DINativeSpectator.trace-request")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write(mode + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: a native-trace request is already pending"))
+        return 1
+    print(c("y", f"  native-trace '{mode}' requested on pid {pid}"))
+    return 0
+
+
 def cmd_arm_stage2_spectator():
     if load_state().get("profile") != "native-spectator-stage2":
         print(c("r", "  refused: native-spectator-stage2 is not active"))
@@ -561,6 +696,138 @@ def cmd_arm_stage2_spectator():
         print(c("r", "  refused: the next spectator connection is already armed"))
         return 1
     print(c("y", f"  next connection armed as a dedicated spectator on pid {pid}"))
+    return 0
+
+
+def _extraction_gate():
+    """Common preconditions for the DIExtraction marker commands."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("mods", {}).get("DIExtraction"):
+        print(c("r", f"  refused: active profile '{active}' does not enable DIExtraction"))
+        return None
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return None
+    return pid
+
+
+def cmd_trigger_extraction(player=None):
+    """Arm the carrier-extraction mode. The DIExtraction Lua mod waits for
+    VAULT_LOCKED with the carrier deployed, advances one phase via the game's
+    own timer-expiry branch, and teleports the carrier to the briefcase. An
+    optional player-name substring designates the carrier (default: the first
+    human connection)."""
+    pid = _extraction_gate()
+    if not pid:
+        return 1
+    marker = os.path.join(WIN64, "DIExtraction.trigger")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write((player or "") + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: an extraction trigger is already pending"))
+        return 1
+    who = f"player matching '{player}'" if player else "the first human player"
+    print(c("y", f"  extraction mode armed on pid {pid}; carrier = {who}"))
+    print(c("d", "  watch DIExtraction.log in the server Win64 folder"))
+    return 0
+
+
+def cmd_extraction_recon():
+    """One-shot dump of live phase/objective/briefcase/controller state into
+    DIExtraction.log, for verifying the mode's world assumptions."""
+    pid = _extraction_gate()
+    if not pid:
+        return 1
+    marker = os.path.join(WIN64, "DIExtraction.recon")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write("RECON\n")
+    except FileExistsError:
+        print(c("r", "  refused: a recon request is already pending"))
+        return 1
+    print(c("y", f"  recon requested on pid {pid}; see DIExtraction.log"))
+    return 0
+
+
+def cmd_grant_loadout(target=None):
+    """Top up a deployed spy's in-match resources to the game's own maximum:
+    intel, all four keycards, ammo/health and every gadget/ability charge the
+    agent actually uses. Pass a player-name substring, 'all' for every
+    connected player, or nothing for the same player the extraction mode would
+    designate as carrier. Meta-progression unlocks are NOT affected - those
+    live on the account backend, not this server."""
+    pid = _extraction_gate()
+    if not pid:
+        return 1
+    marker = os.path.join(WIN64, "DIExtraction.loadout")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write((target or "") + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: a loadout grant is already pending"))
+        return 1
+    if target == "all":
+        who = "every connected player"
+    elif target:
+        who = f"player matching '{target}'"
+    else:
+        who = "the designated carrier (first human player)"
+    print(c("y", f"  loadout grant requested on pid {pid} for {who}"))
+    print(c("d", "  the target must be DEPLOYED; see DIExtraction.log"))
+    return 0
+
+
+def cmd_disguise(level=None, target=None):
+    """Give a deployed spy an NPC disguise clearance via the game's own
+    ASpy::CheatDisguiseGiveSecurityLevelSrv. Accepts a tier name
+    (civilian/staff/guard/technician/vip), a keycard colour
+    (green/blue/purple/orange), a raw 0-4, or 'off' to stop re-applying.
+    The level is remembered and re-applied when the carrier deploys, so the
+    extraction phase starts with the disguise already on."""
+    valid = ("civilian", "staff", "guard", "technician", "vip",
+             "green", "blue", "purple", "orange", "off", "0", "1", "2", "3", "4")
+    if level is None or level.lower() not in valid:
+        print(c("r", "  usage: dimod.py disguise <tier|colour|0-4|off> [player]"))
+        print(c("d", "  tiers:  civilian staff guard technician vip"))
+        print(c("d", "  colours: green=staff blue=guard purple=technician orange=vip"))
+        return 1
+    pid = _extraction_gate()
+    if not pid:
+        return 1
+    marker = os.path.join(WIN64, "DIExtraction.disguise")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write(f"{level.lower()} {target or ''}".strip() + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: a disguise request is already pending"))
+        return 1
+    if level.lower() == "off":
+        print(c("y", f"  disguise auto-apply cleared on pid {pid}"))
+    else:
+        print(c("y", f"  disguise '{level}' requested on pid {pid}"))
+        print(c("d", "  applied now if deployed, and re-applied on next deploy"))
+        print(c("d", "  CheatDisguise* is unproven on this build - check "
+                     "DIExtraction.log for whether it took effect"))
+    return 0
+
+
+def cmd_rescue(target=None):
+    """Teleport a player who has fallen out of the world back onto solid
+    ground, anchored on a live NPC's position (an NPC is standing on navmesh by
+    definition)."""
+    pid = _extraction_gate()
+    if not pid:
+        return 1
+    marker = os.path.join(WIN64, "DIExtraction.rescue")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write((target or "") + "\n")
+    except FileExistsError:
+        print(c("r", "  refused: a rescue is already pending"))
+        return 1
+    print(c("y", f"  rescue requested on pid {pid}"))
     return 0
 
 
@@ -588,6 +855,23 @@ def main():
     if cmd == "trigger-stage2":
         return cmd_trigger_stage2(a[1] if len(a) > 1 else None)
     if cmd == "arm-stage2-spectator": return cmd_arm_stage2_spectator()
+    if cmd == "force-death": return cmd_force_death()
+    if cmd == "trigger-native-freemove": return cmd_trigger_native_freemove()
+    if cmd == "native-invoke":
+        return cmd_native_invoke(a[1] if len(a) > 1 else None)
+    if cmd == "native-trace":
+        return cmd_native_trace(a[1] if len(a) > 1 else None)
+    if cmd == "trigger-extraction":
+        return cmd_trigger_extraction(a[1] if len(a) > 1 else None)
+    if cmd == "extraction-recon":
+        return cmd_extraction_recon()
+    if cmd == "grant-loadout":
+        return cmd_grant_loadout(a[1] if len(a) > 1 else None)
+    if cmd == "disguise":
+        return cmd_disguise(a[1] if len(a) > 1 else None,
+                            a[2] if len(a) > 2 else None)
+    if cmd == "rescue":
+        return cmd_rescue(a[1] if len(a) > 1 else None)
     print(c("r", f"  unknown command: {cmd}"))
     print(__doc__)
     return 1

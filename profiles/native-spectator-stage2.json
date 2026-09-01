@@ -6,7 +6,8 @@
     "DINativeStage2": true
   },
   "native_modules": [
-    "DINativeSpectatorStage2"
+    "DINativeSpectatorStage2",
+    "DINativeSpectatorStage3"
   ],
   "diconfig": {
     "Timing": {
@@ -21,7 +22,8 @@
     "GameMode": "Solo",
     "MaxPlayers": "8",
     "BotsAmount": "7",
-    "bIsPublic": "False",
+    "bIsPublic": "True",
+    "bEnableUPnP": "True",
     "AutoShutdownEmptyMinutes": "60"
   }
 }

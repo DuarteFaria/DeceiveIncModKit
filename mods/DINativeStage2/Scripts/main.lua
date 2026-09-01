@@ -5,7 +5,47 @@
 local OUT = "DINativeStage2.log"
 local TRIGGER = "DINativeSpectator.stage2-trigger"
 local NEXT_DEDICATED = "DINativeSpectator.next-dedicated"
+local FORCE_DEATH = "DINativeSpectator.force-death"
+local NATIVE_FREEMOVE = "DINativeSpectator.native-freemove"
 local READINESS_OVERRIDE = "DINativeSpectator.readiness-override"
+-- Stage 3 native invoker handshake. Lua resolves the live pawn + UFunction
+-- addresses (only Lua can, via GetAddress) and hands them to the C++ DLL, which
+-- calls ProcessEvent on the game thread. dimod writes the *-request files; Lua
+-- emits the addressed markers the DLL consumes.
+local INVOKE_REQUEST = "DINativeSpectator.invoke-request"
+local INVOKE_MARKER = "DINativeSpectator.invoke"
+local TRACE_REQUEST = "DINativeSpectator.trace-request"
+local TRACE_MARKER = "DINativeSpectator.trace"
+
+-- Login-spectator experiment toggles. A live test showed the stock client DOES
+-- honor route29 (Deploy greys out, agent-select briefly drops during the phase
+-- change) but then falls back to agent-select instead of the spectator view.
+-- The manual phase advance (route31) and pawn handoff (route32-35) predate the
+-- native readiness override (route30); now that route30 lets the stalled lobby
+-- start on its own, those manual steps may be racing the game's native
+-- dedicated-spectator presentation. Disable them to test whether the untouched
+-- client enters the spectator view natively once the lobby simply unblocks.
+-- Experiment C: native match start (no forced intro) + manual pawn handoff.
+-- The native run proved the client enters spectator mode and asks for a target
+-- on its own, but no spectator pawn is ever spawned for a dedicated spectator,
+-- so it has nothing to view. Supply only the missing pawn; do NOT force the
+-- phase intro (route31), which previously yanked the client UI back to
+-- agent-select. Without route31 the bots spawn later (~16s), so the handoff
+-- must keep retrying until a live target exists (see HANDOFF_MAX_ATTEMPTS).
+local MANUAL_PHASE_ADVANCE = false     -- route31 (game advances phase on its own)
+local MANUAL_SPECTATOR_HANDOFF = true  -- route32/33 (supply the missing spectator pawn)
+local HANDOFF_MAX_ATTEMPTS = 16        -- ~20s of 1250ms retries, covers native bot spawn
+-- route35 (auto-spectate + view-target) tripped the status-3 exit when the
+-- client was ALREADY natively spectating: writing the replicated
+-- bIsAutoSpectating flag on a live spectating controller is illegal-state.
+-- The client drives its own follow camera (it sends Server_AskForNextSpectatedActor
+-- unprompted), so leave it alone and only give it a pawn. Keep this off unless
+-- a test shows the client needs a server nudge.
+local DRIVE_FOLLOW_CAMERA = false
+-- The server-side RPC_SpectateActor seed is also optional now that the client
+-- selects its own target. Off by default to keep the handoff minimal; the
+-- client's native A/D cycling should pick a live agent on its own.
+local SEED_SPECTATE_TARGET = false
 local retained_component = nil
 local retained_original_pawn = nil
 local retained_spectator = nil
@@ -306,6 +346,47 @@ same_world = function(left, right)
            full(left_world) == full(right_world)
 end
 
+-- Return the runtime address of an object (GetAddress), or nil.
+local function address_of(object)
+    if object == nil then return nil end
+    local address
+    if pcall(function() address = object:GetAddress() end) and address then
+        return address
+    end
+    return nil
+end
+
+-- Resolve a UFunction by its "/Script/..." path to a runtime address. The DLL
+-- needs the UFunction pointer to call ProcessEvent(target, func, parms).
+local function ufunction_address(path)
+    local functions
+    pcall(function() functions = FindAllOf("Function") end)
+    if not functions then return nil end
+    for i = 1, #functions do
+        local fn = functions[i]
+        local rendered = full(fn)
+        if rendered == "Function " .. path then
+            return address_of(fn)
+        end
+    end
+    return nil
+end
+
+-- First live (non-CDO) instance of class_name sharing the controller's world.
+local function first_live_instance(class_name, controller)
+    local objs
+    pcall(function() objs = FindAllOf(class_name) end)
+    if not objs then return nil end
+    for i = 1, #objs do
+        local o = objs[i]
+        local n = full(o)
+        if not n:find("Default__", 1, true) and same_world(o, controller) then
+            return o
+        end
+    end
+    return nil
+end
+
 local function find_live_spy_target(controller)
     local spies
     pcall(function() spies = FindAllOf("Spy") end)
@@ -336,6 +417,76 @@ local function find_live_spy_target(controller)
     return nil, nil
 end
 
+local function reacquire_named_spy(controller, expected_name)
+    if expected_name == nil or expected_name == "<unrenderable>" then
+        return nil
+    end
+    local spies
+    pcall(function() spies = FindAllOf("Spy") end)
+    if not spies then return nil end
+    for i = 1, #spies do
+        local candidate = spies[i]
+        if full(candidate) == expected_name and
+           same_world(candidate, controller) then
+            return candidate
+        end
+    end
+    return nil
+end
+
+local function drive_client_follow_camera(controller, target_actor)
+    -- Route 35: RPC_SpectateActor is a client->server RPC (this build ships no
+    -- Client_/NetMulticast_ spectate-target counterpart), so calling it on the
+    -- server never moves the owning client's camera. Two genuine server->client
+    -- levers do exist; try them in order and log each so a live test can tell
+    -- which one, if either, actually follows an agent.
+    --
+    -- Lever 1: bIsAutoSpectating is a replicated bool with OnRep_IsAutoSpectating.
+    -- Setting it server-side and forcing a net update should fire that OnRep on
+    -- the client and let the stock DISpectatorPawn run its own follow loop,
+    -- preserving the 3P spring-arm framing without any per-target RPC.
+    local auto_ok, auto_err = pcall(function()
+        controller.bIsAutoSpectating = true
+        controller:ForceNetUpdate()
+    end)
+    append("route35 auto-spectate set ok=" .. tostring(auto_ok) ..
+           " bIsAutoSpectating=" .. scalar_property(controller, "bIsAutoSpectating") ..
+           " error=" .. tostring(auto_err))
+
+    -- Lever 2 (fallback): the engine's SetViewTargetWithBlend is a real
+    -- server->client view-target change. It points the client camera straight
+    -- at the spy, bypassing the pawn's spring-arm framing, but guarantees a
+    -- visible result and proves server-driven camera control while Spectating.
+    -- Delayed so lever 1 gets a replication window first; a watcher can see
+    -- whether anything follows before this blend takes over. Only the target's
+    -- name string is captured across the delay: reacquire the live spy inside
+    -- the callback, never a retained wrapper. VTBlend_Linear = 0.
+    local target_name = full(target_actor)
+    ExecuteWithDelay(1500, function()
+        local live
+        pcall(function() live = FindAllOf("DeceiveIncPlayerController") end)
+        if not live or #live ~= 1 then
+            append("route35 view-target fallback refused: expected one controller, found=" ..
+                   tostring(live and #live or 0))
+            return
+        end
+        local ctrl = live[1]
+        local spy = reacquire_named_spy(ctrl, target_name)
+        if spy == nil then
+            append("route35 view-target fallback refused: spy no longer live name=" ..
+                   target_name)
+            return
+        end
+        local view_ok, view_err = pcall(function()
+            ctrl:SetViewTargetWithBlend(spy, 0.4, 0, 0.0, false)
+        end)
+        append("route35 SetViewTargetWithBlend ok=" .. tostring(view_ok) ..
+               " actor=" .. full(spy) ..
+               " state=" .. scalar_property(ctrl, "StateName") ..
+               " error=" .. tostring(view_err))
+    end)
+end
+
 local function initialize_dedicated_spectator_target()
     -- Reacquire everything after ClientRestart. Retaining any live UObject
     -- wrapper across this delay has already caused teardown corruption.
@@ -361,6 +512,16 @@ local function initialize_dedicated_spectator_target()
         return
     end
 
+    -- The client already possesses the spectator pawn and drives its own follow
+    -- camera. By default do nothing further: seeding a target or writing the
+    -- auto-spectate flag on an already-spectating client tripped the status-3
+    -- exit. Only act if a test explicitly re-enables a server nudge.
+    if not SEED_SPECTATE_TARGET and not DRIVE_FOLLOW_CAMERA then
+        append("route32 target init: pawn in place, leaving follow to the native client pawn=" ..
+               pawn_name .. " state=" .. scalar_property(controller, "StateName"))
+        return
+    end
+
     local target_actor, target_player_state =
         find_live_spy_target(controller)
     if target_actor == nil or target_player_state == nil then
@@ -368,15 +529,21 @@ local function initialize_dedicated_spectator_target()
         return
     end
 
-    local ok, err = pcall(function()
-        controller:RPC_SpectateActor(target_actor, target_player_state)
-    end)
-    append("route32 RPC_SpectateActor ok=" .. tostring(ok) ..
-           " actor=" .. full(target_actor) ..
-           " target_player_state=" .. full(target_player_state) ..
-           " pawn=" .. pawn_name ..
-           " state=" .. scalar_property(controller, "StateName") ..
-           " error=" .. tostring(err))
+    if SEED_SPECTATE_TARGET then
+        local ok, err = pcall(function()
+            controller:RPC_SpectateActor(target_actor, target_player_state)
+        end)
+        append("route32 RPC_SpectateActor ok=" .. tostring(ok) ..
+               " actor=" .. full(target_actor) ..
+               " target_player_state=" .. full(target_player_state) ..
+               " pawn=" .. pawn_name ..
+               " state=" .. scalar_property(controller, "StateName") ..
+               " error=" .. tostring(err))
+    end
+
+    if DRIVE_FOLLOW_CAMERA then
+        drive_client_follow_camera(controller, target_actor)
+    end
 end
 
 local function spawn_dedicated_spectator_pawn(attempt)
@@ -421,7 +588,7 @@ local function spawn_dedicated_spectator_pawn(attempt)
         append("route32 waiting for live bot target attempt=" .. tostring(attempt) ..
                " game_state=" .. full(game_state) ..
                " target=" .. full(target_actor))
-        if attempt < 4 then
+        if attempt < HANDOFF_MAX_ATTEMPTS then
             ExecuteWithDelay(1250, function()
                 spawn_dedicated_spectator_pawn(attempt + 1)
             end)
@@ -562,6 +729,16 @@ local function consume_trigger()
            " pawn=" .. route10_name .. " state=" ..
            scalar_property(controller, "StateName"))
     if route10_name:find("DebugFreecam", 1, true) then
+        -- BANKED: the DebugFreecam->follow return is not supported. Natural
+        -- follow-spectating is pawn-less, so recreating a follow pawn only
+        -- strands the client on the dead body. Refuse cleanly and stay in the
+        -- (working) freecam instead of stranding. Free-roam via DebugFreecam is
+        -- therefore a one-way detach; use follow (A/D) before detaching.
+        append("route24 return not supported: staying in DebugFreecam (pawn-less " ..
+               "follow cannot be recreated); A/D follow is the primary mode")
+        return
+    end
+    if false then
         local return_state = scalar_property(controller, "StateName")
         if return_state ~= "Spectating" then
             append("route24 refused return: expected Spectating state, found=" ..
@@ -1028,7 +1205,362 @@ local function consume_trigger()
     end)
 end
 
+-- Option C (deploy-then-spectate): kill the human's own deployed spy through the
+-- game's own health path so the untouched client enters its native, proven
+-- death-spectator flow (spectator HUD + working A/D follow). No faction-210
+-- login is involved; the player joined as a normal combat player, so the match
+-- started the stable way. After this drops the player into spectating,
+-- `trigger-stage2` (route 27) can toggle the freecam free-move on top.
+local function consume_force_death()
+    local fh = io.open(FORCE_DEATH, "r")
+    if not fh then return end
+    fh:close()
+    os.remove(FORCE_DEATH)
+
+    local controllers
+    pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
+    if not controllers or #controllers < 1 then
+        append("force-death refused: no human player controller present")
+        return
+    end
+
+    for i = 1, #controllers do
+        local controller = controllers[i]
+        local pawn
+        pcall(function() pawn = unwrap(controller.Pawn) end)
+        local pawn_name = full(pawn)
+        if pawn ~= nil and pawn_name:find("BPSpy_", 1, true) then
+            local health
+            pcall(function() health = unwrap(pawn.HealthComponent) end)
+            if health == nil then
+                append("force-death refused: spy has no HealthComponent pawn=" ..
+                       pawn_name)
+                return
+            end
+            -- DISABLED: SetHealth(0) does kill the spy, but the HUMAN death
+            -- flow (BlowCover -> killcam) then hits the status-3 exit because a
+            -- raw health write skips the damage/killer data a real kill sets up.
+            -- A bot kill uses the full damage pipeline and is the confirmed
+            -- working death->spectator path. Until force-death routes through
+            -- that pipeline safely, it only reports state and does not kill.
+            local hp, dead = "?", "?"
+            pcall(function() hp = tostring(health:GetHealth()) end)
+            pcall(function() dead = tostring(health:IsDead()) end)
+            append("force-death DISABLED (would crash): pawn=" .. pawn_name ..
+                   " hp=" .. hp .. " dead=" .. dead ..
+                   " state=" .. scalar_property(controller, "StateName") ..
+                   " -- die to a bot instead, then trigger-stage2")
+            return
+        end
+    end
+    append("force-death refused: no human controller currently owns a live spy pawn")
+end
+
+-- Gate A test: drive the game's OWN free<->follow toggle server-side, instead
+-- of the DebugFreecam workaround. The toggle is asymmetric:
+--   follow -> free : DISpectatorPawn:CheatSpectateFreeMoveSrv()  (server RPC)
+--   free -> follow : DIFreeSpectator:ServerReturnToPlayer()
+-- Both are no-arg. If these work, the native return (stuck-in-dead-body) is
+-- solved without any C++. Only the client CheatSpectateFreeMove was tried
+-- before (and failed); the server Srv entry was never used on its own.
+local function consume_native_freemove()
+    local fh = io.open(NATIVE_FREEMOVE, "r")
+    if not fh then return end
+    fh:close()
+    os.remove(NATIVE_FREEMOVE)
+
+    local controllers
+    pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
+    if not controllers or #controllers < 1 then
+        append("native-freemove refused: no human player controller")
+        return
+    end
+    local controller = controllers[1]
+    local state = scalar_property(controller, "StateName")
+    -- The controller's pawn refs point at the dead spy body during natural
+    -- follow-spectating, so find the live spectator pawn BY CLASS in the same
+    -- world instead. DIFreeSpectator = currently free (go back); DISpectatorPawn
+    -- = follow (go free). If neither exists live, natural follow uses no such
+    -- pawn and the native free-move entry has nothing to call on.
+    local function first_live_same_world(class_name)
+        local objs
+        pcall(function() objs = FindAllOf(class_name) end)
+        if not objs then return nil end
+        for i = 1, #objs do
+            local o = objs[i]
+            local n = full(o)
+            if not n:find("Default__", 1, true) and same_world(o, controller) then
+                return o
+            end
+        end
+        return nil
+    end
+
+    local free = first_live_same_world("DIFreeSpectator")
+    local spec = first_live_same_world("DISpectatorPawn")
+    append("native-freemove resolve state=" .. state ..
+           " live_DIFreeSpectator=" .. (free ~= nil and "yes" or "no") ..
+           " live_DISpectatorPawn=" .. (spec ~= nil and "yes" or "no"))
+
+    local action, ok, err
+    if free ~= nil then
+        action = "DIFreeSpectator:ServerReturnToPlayer"
+        ok, err = pcall(function() free:ServerReturnToPlayer() end)
+    elseif spec ~= nil then
+        action = "DISpectatorPawn:CheatSpectateFreeMoveSrv"
+        ok, err = pcall(function() spec:CheatSpectateFreeMoveSrv() end)
+    else
+        append("native-freemove refused: no live DISpectatorPawn or DIFreeSpectator " ..
+               "in this world -- natural follow spectating has no such pawn to drive")
+        return
+    end
+
+    append("native-freemove call=" .. action .. " ok=" .. tostring(ok) ..
+           " state=" .. state .. " error=" .. tostring(err))
+    -- Report the resulting pawn/state after the transition replicates. Reacquire
+    -- fresh; never retain the pawn wrapper across the delay.
+    ExecuteWithDelay(500, function()
+        local ctrls
+        pcall(function() ctrls = FindAllOf("DeceiveIncPlayerController") end)
+        local c2 = ctrls and ctrls[1]
+        local frees = 0
+        pcall(function() frees = #(FindAllOf("DIFreeSpectator") or {}) end)
+        append("native-freemove after call=" .. action ..
+               " after_pawn=" .. (c2 and property(c2, "Pawn") or "<none>") ..
+               " state=" .. (c2 and scalar_property(c2, "StateName") or "?") ..
+               " live_DIFreeSpectator=" .. tostring(frees))
+    end)
+end
+
+-- Stage 3 handshake. dimod drops DINativeSpectator.invoke-request with a single
+-- token ("free"/"follow"); we resolve the live pawn + UFunction addresses and
+-- write DINativeSpectator.invoke (target=/func=) for the C++ game-thread invoker.
+-- Unlike consume_native_freemove (which calls through UE4SS marshaling), this
+-- path hands raw addresses to ProcessEvent and works even where the reflected
+-- call boundary is unreliable.
+local INVOKE_PLAN = {
+    free = {
+        class = "DISpectatorPawn",
+        func = "/Script/DeceiveInc.DISpectatorPawn:CheatSpectateFreeMoveSrv",
+    },
+    follow = {
+        class = "DIFreeSpectator",
+        func = "/Script/DeceiveInc.DIFreeSpectator:ServerReturnToPlayer",
+    },
+}
+
+-- The game's own free-move (CheatSpectateFreeMoveSrv) is a method ON a
+-- DISpectatorPawn, but the death path is pawn-less. Manufacture one from the
+-- current follow state using the proven-safe Route 24 sequence (SpawnActor +
+-- direct ownership + ClientRestart; NO Possess), so the native call has an
+-- instance to run on. The manufactured pawn is what the game would set up on the
+-- login path; whether CheatSpectateFreeMoveSrv fully initializes on it is exactly
+-- what native-invoke free tests.
+local retained_native_spec_name = nil
+
+-- Find a live spectator pawn: either a DISpectatorPawn subclass instance or an
+-- instance of the live GameState.SpectatorClass (covers BP_DISpectatorPawn_C
+-- whether or not FindAllOf matches subclasses).
+local function find_live_spectator_pawn(controller)
+    local direct = first_live_instance("DISpectatorPawn", controller)
+    if direct then return direct end
+    local game_state = find_live_game_state()
+    local spectator_class
+    if game_state then
+        pcall(function() spectator_class = unwrap(game_state.SpectatorClass) end)
+    end
+    if spectator_class == nil then return nil end
+    local class_leaf = full(spectator_class):match("([^%.:/]+)$")
+    if not class_leaf then return nil end
+    return first_live_instance(class_leaf, controller)
+end
+
+local function manufacture_spectator_pawn(controller)
+    local player_state
+    pcall(function() player_state = unwrap(controller.PlayerState) end)
+    local game_state = find_live_game_state()
+    if game_state == nil or not same_world(game_state, controller) then
+        append("native-spawn refused: no live game state in controller world")
+        return nil
+    end
+    local spectator_class, world
+    pcall(function()
+        spectator_class = unwrap(game_state.SpectatorClass)
+        world = unwrap(controller:GetWorld())
+    end)
+    if spectator_class == nil or world == nil then
+        append("native-spawn refused: SpectatorClass/world unavailable spectator_class=" ..
+               full(spectator_class))
+        return nil
+    end
+
+    -- Spawn near a live spy so the pawn starts inside the level; the exact spot
+    -- is unimportant for a pawn that will free-move.
+    local anchor = select(1, find_live_spy_target(controller))
+    local raw_location, raw_rotation
+    pcall(function()
+        if anchor ~= nil then
+            raw_location = unwrap(anchor:K2_GetActorLocation())
+            raw_rotation = unwrap(anchor:K2_GetActorRotation())
+        end
+    end)
+    local location = raw_location and
+        { X = raw_location.X, Y = raw_location.Y, Z = raw_location.Z } or
+        { X = 0.0, Y = 0.0, Z = 0.0 }
+    local rotation = raw_rotation and
+        { Pitch = raw_rotation.Pitch, Yaw = raw_rotation.Yaw, Roll = raw_rotation.Roll } or
+        { Pitch = 0.0, Yaw = 0.0, Roll = 0.0 }
+
+    local fresh_spectator
+    local spawn_ok, spawn_error = pcall(function()
+        fresh_spectator = world:SpawnActor(spectator_class, location, rotation)
+    end)
+    append("native-spawn SpawnActor ok=" .. tostring(spawn_ok) ..
+           " spectator=" .. full(fresh_spectator) ..
+           " error=" .. tostring(spawn_error))
+    if not spawn_ok or fresh_spectator == nil then return nil end
+
+    local old_pawn
+    pcall(function() old_pawn = unwrap(controller.Pawn) end)
+    local handoff_ok, handoff_error = pcall(function()
+        if old_pawn ~= nil then old_pawn.Controller = nil end
+        fresh_spectator.Controller = controller
+        controller.Pawn = fresh_spectator
+        if player_state ~= nil then
+            player_state.PawnPrivate = fresh_spectator
+            player_state:ForceNetUpdate()
+        end
+        controller:ClientRestart(fresh_spectator)
+    end)
+    retained_native_spec_name = full(fresh_spectator)
+    append("native-spawn handoff ok=" .. tostring(handoff_ok) ..
+           " pawn=" .. retained_native_spec_name ..
+           " state=" .. scalar_property(controller, "StateName") ..
+           " error=" .. tostring(handoff_error))
+    if not handoff_ok then return nil end
+    return fresh_spectator
+end
+
+local function consume_invoke_request()
+    local fh = io.open(INVOKE_REQUEST, "r")
+    if not fh then return end
+    local token = (fh:read("*l") or ""):gsub("%s+", "")
+    fh:close()
+    os.remove(INVOKE_REQUEST)
+
+    local plan = INVOKE_PLAN[token]
+    if not plan then
+        append("invoke-request refused: unknown direction '" .. token .. "'")
+        return
+    end
+
+    local controllers
+    pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
+    local controller = controllers and controllers[1]
+    if not controller then
+        append("invoke-request refused: no human player controller")
+        return
+    end
+
+    local target
+    if token == "free" then
+        target = find_live_spectator_pawn(controller)
+        if not target then
+            -- No spectator pawn yet: manufacture one and stop. The client
+            -- ClientRestart needs a moment to acknowledge, so re-run
+            -- `native-invoke free` to drive CheatSpectateFreeMoveSrv on it.
+            local made = manufacture_spectator_pawn(controller)
+            if made then
+                append("invoke-request direction=free spawned a spectator pawn; " ..
+                       "re-run `dimod native-invoke free` to drive free-move on it")
+            else
+                append("invoke-request direction=free could not manufacture a spectator pawn")
+            end
+            return
+        end
+    else
+        target = first_live_instance(plan.class, controller)
+        if not target then
+            append("invoke-request refused direction=" .. token ..
+                   " -- no live " .. plan.class .. " in this world")
+            return
+        end
+    end
+    local target_addr = address_of(target)
+    local func_addr = ufunction_address(plan.func)
+    if not target_addr or not func_addr then
+        append("invoke-request refused direction=" .. token ..
+               " target_addr=" .. tostring(target_addr) ..
+               " func_addr=" .. tostring(func_addr))
+        return
+    end
+
+    local marker = io.open(INVOKE_MARKER, "w")
+    if not marker then
+        append("invoke-request failed: could not write invoke marker")
+        return
+    end
+    marker:write(string.format("target=0x%X func=0x%X\n", target_addr, func_addr))
+    marker:close()
+    append(string.format(
+        "invoke-request resolved direction=%s target=%s(0x%X) func=%s(0x%X)",
+        token, plan.class, target_addr, plan.func, func_addr))
+end
+
+-- Default trace watch-set: the two spectator-toggle RPCs plus the follow-target
+-- selection RPC, with a controller byte-range that spans the known replicated
+-- spectator flags (bIsAutoSpectating ~0x82C). The DLL dumps this range from each
+-- call's `self`; diff it across natural-follow / freecam / post-return.
+local TRACE_FUNCS = {
+    "/Script/DeceiveInc.DeceiveIncPlayerController:RPC_SpectateActor",
+    "/Script/DeceiveInc.DeceiveIncPlayerController:Server_AskForNextSpectatedActor",
+    "/Script/DeceiveInc.DISpectatorPawn:CheatSpectateFreeMoveSrv",
+    "/Script/DeceiveInc.DIFreeSpectator:ServerReturnToPlayer",
+}
+local TRACE_DUMP_OFFSET = 0x800
+local TRACE_DUMP_LENGTH = 0x40
+
+local function consume_trace_request()
+    local fh = io.open(TRACE_REQUEST, "r")
+    if not fh then return end
+    local mode = (fh:read("*l") or ""):gsub("%s+", "")
+    fh:close()
+    os.remove(TRACE_REQUEST)
+
+    local marker = io.open(TRACE_MARKER, "w")
+    if not marker then
+        append("trace-request failed: could not write trace marker")
+        return
+    end
+    if mode == "off" then
+        marker:write("dumpoff=0x0 dumplen=0x0\n")  -- empty set disables tracing
+        marker:close()
+        append("trace-request cleared")
+        return
+    end
+
+    local resolved = 0
+    marker:write(string.format("dumpoff=0x%X dumplen=0x%X\n",
+                               TRACE_DUMP_OFFSET, TRACE_DUMP_LENGTH))
+    for _, path in ipairs(TRACE_FUNCS) do
+        local addr = ufunction_address(path)
+        if addr then
+            marker:write(string.format("func=0x%X\n", addr))
+            resolved = resolved + 1
+            append(string.format("trace watch %s=0x%X", path, addr))
+        else
+            append("trace watch unresolved " .. path)
+        end
+    end
+    marker:close()
+    append("trace-request armed functions=" .. resolved)
+end
+
 local trigger_error
+local force_death_error
+local native_freemove_error
+local invoke_request_error
+local trace_request_error
 LoopAsync(500, function()
     local ok, err = pcall(consume_trigger)
     if not ok and tostring(err) ~= trigger_error then
@@ -1036,6 +1568,34 @@ LoopAsync(500, function()
         append("consume_trigger error=" .. trigger_error)
     elseif ok then
         trigger_error = nil
+    end
+    local fd_ok, fd_err = pcall(consume_force_death)
+    if not fd_ok and tostring(fd_err) ~= force_death_error then
+        force_death_error = tostring(fd_err)
+        append("consume_force_death error=" .. force_death_error)
+    elseif fd_ok then
+        force_death_error = nil
+    end
+    local nf_ok, nf_err = pcall(consume_native_freemove)
+    if not nf_ok and tostring(nf_err) ~= native_freemove_error then
+        native_freemove_error = tostring(nf_err)
+        append("consume_native_freemove error=" .. native_freemove_error)
+    elseif nf_ok then
+        native_freemove_error = nil
+    end
+    local iv_ok, iv_err = pcall(consume_invoke_request)
+    if not iv_ok and tostring(iv_err) ~= invoke_request_error then
+        invoke_request_error = tostring(iv_err)
+        append("consume_invoke_request error=" .. invoke_request_error)
+    elseif iv_ok then
+        invoke_request_error = nil
+    end
+    local tr_ok, tr_err = pcall(consume_trace_request)
+    if not tr_ok and tostring(tr_err) ~= trace_request_error then
+        trace_request_error = tostring(tr_err)
+        append("consume_trace_request error=" .. trace_request_error)
+    elseif tr_ok then
+        trace_request_error = nil
     end
     return false
 end)
@@ -1089,23 +1649,30 @@ RegisterHook(
                 readiness:write("FACTION 210 READY\n")
                 readiness:close()
                 append("route29 armed one-shot native readiness override")
-                ExecuteWithDelay(2500, function()
-                    local phase_ok, phase_error =
-                        pcall(advance_spectator_only_pregame)
-                    if not phase_ok then
-                        append("route31 phase advance callback error=" ..
-                               tostring(phase_error))
-                    end
-                end)
-                ExecuteWithDelay(5000, function()
-                    local handoff_ok, handoff_error = pcall(function()
-                        spawn_dedicated_spectator_pawn(1)
+                append("route29 manual-flow toggles phase_advance=" ..
+                       tostring(MANUAL_PHASE_ADVANCE) .. " handoff=" ..
+                       tostring(MANUAL_SPECTATOR_HANDOFF))
+                if MANUAL_PHASE_ADVANCE then
+                    ExecuteWithDelay(2500, function()
+                        local phase_ok, phase_error =
+                            pcall(advance_spectator_only_pregame)
+                        if not phase_ok then
+                            append("route31 phase advance callback error=" ..
+                                   tostring(phase_error))
+                        end
                     end)
-                    if not handoff_ok then
-                        append("route32 spectator-pawn callback error=" ..
-                               tostring(handoff_error))
-                    end
-                end)
+                end
+                if MANUAL_SPECTATOR_HANDOFF then
+                    ExecuteWithDelay(5000, function()
+                        local handoff_ok, handoff_error = pcall(function()
+                            spawn_dedicated_spectator_pawn(1)
+                        end)
+                        if not handoff_ok then
+                            append("route32 spectator-pawn callback error=" ..
+                                   tostring(handoff_error))
+                        end
+                    end)
+                end
             else
                 append("route29 failed to arm native readiness override")
             end

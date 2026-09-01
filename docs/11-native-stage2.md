@@ -348,11 +348,108 @@ update therefore produces a logged refusal rather than patching an unknown
 address. Profile application also removes all stale one-shot markers so the
 override cannot survive a restart.
 
+## Route 35: server-driven follow camera (pending live test)
+
+Object-dump inspection of build 24975521 confirms `DeceiveIncPlayerController`
+ships no `Client_`/`NetMulticast_` spectate-target function; the only spectate
+RPCs are `Server_AskForNextSpectatedActor` and `RPC_SpectateActor`, both
+client->server. Calling `RPC_SpectateActor` on the server therefore records the
+selection but cannot move the owning client's camera, which is why the login
+handoff leaves the client parked on its spectator pawn.
+
+Two genuine server->client levers exist. Route 35 runs both from
+`initialize_dedicated_spectator_target`, immediately after the (retained)
+`RPC_SpectateActor` call, and logs each:
+
+1. **Auto-spectate replication.** `bIsAutoSpectating` (offset `0x82C`) is a
+   replicated bool with `OnRep_IsAutoSpectating`. Route 35 sets it and calls
+   `ForceNetUpdate`, expecting the OnRep to run the stock client follow loop and
+   keep the pawn's `SpringArm3P` / `Camera3P` framing without per-target RPCs.
+2. **`SetViewTargetWithBlend` fallback.** After a 1.5s replication window, Route
+   35 reacquires the live spy by name (no wrapper retained across the delay) and
+   blends the client view target straight to it. This bypasses the spectator
+   pawn framing but guarantees a visible result and proves server-driven camera
+   control while `Spectating`.
+
+A live test decides which lever, if either, follows an agent. If lever 1 works,
+lever 2 becomes unnecessary; if only lever 2 works, `A` / `D` cycling stays
+client-driven and unsolved. Route 35 is reached only through the existing
+faction-210 login gate, so it is inherently one-shot per connection.
+
+## Route 36: native game-thread UFunction invoker (pending live test)
+
+Every earlier `native-freemove` attempt was refused before executing, because it
+was always run during pawn-less natural follow-spectating, where no live
+`DISpectatorPawn`/`DIFreeSpectator` exists to call on. The promising call — the
+game's own `CheatSpectateFreeMoveSrv()` on the *fresh acknowledged*
+`BP_DISpectatorPawn` that the Route 24 return spawns — has never actually been
+made, in Lua or native. Route 36 makes it callable through a native path that
+also removes the two prior obstacles (UE4SS marshaling reliability and
+game-thread affinity).
+
+`DINativeSpectatorStage3.dll` (`src/invoker.cpp`) hooks `UObject::ProcessEvent`
+(RVA `0x191D970` in build 24975521, validated by a 32-byte prefix; identified as
+the sole ProcessEvent candidate present in 2227 vtables, its body saving
+`Function` in `rsi` and testing `FunctionFlags & 0x400` at `[rsi+0xB0]` for RPC
+routing). The hook is the exact game-thread entry the engine uses to dispatch a
+UFunction, so re-invoking the trampoline with our own `(target, func, parms)`
+executes a server RPC server-side with correct local/remote routing, no
+marshaling, and no thread hazard. All three Gate A targets
+(`CheatSpectateFreeMoveSrv`, `CheatSpectateFreeMove`, `ServerReturnToPlayer`) are
+parameterless, so a zeroed buffer is a safe `Parms`.
+
+The DLL is inert until UE4SS Lua drops a one-shot marker. Division of labor: only
+Lua can resolve live addresses (`GetAddress()`), so `dimod native-invoke
+<free|follow>` writes a request, the Lua resolver looks up the live pawn and the
+target UFunction and writes `DINativeSpectator.invoke` (`target=`/`func=`), and
+the DLL drains it on the game thread. Pointers are validated (`VirtualQuery`
+committed+readable, object vtable readable) before any dereference. The same
+ProcessEvent hook powers `dimod native-trace <arm|off>`: it logs each watched
+spectate RPC with a hexdump of a `self` byte-range (default the controller region
+around the replicated spectator flags), for diffing spectator state across
+natural-follow / freecam / post-return.
+
+### Route 36 result (2026-09-01): the server functions are empty stubs
+
+Live-tested. The invoker works perfectly: `native-invoke free` manufactured a
+`BP_DISpectatorPawn_C`, handed it off, and dispatched `CheatSpectateFreeMoveSrv`
+on it through ProcessEvent on the game thread (`invoke dispatch → invoke
+complete`, server stayed up). But the call was a **no-op** — the follow-up
+`native-invoke follow` found no `DIFreeSpectator`, so the free-move never
+happened.
+
+Disassembly of the running server explains why. Reading the live UFunction's
+`Func` (UFunction+0xD8) and following the exec thunk to the virtual slot:
+
+- `ADISpectatorPawn::CheatSpectateFreeMoveSrv_Implementation` (vtable+0x790)
+  resolves to `0x7FF623A0D4B0`, whose entire body is `C2 00 00` — **`ret 0`**.
+- `ADISpectatorPawn::CheatSpectateFreeMove` (the client variant) tail-jumps to
+  the **same** `0x7FF623A0D4B0` `ret` stub.
+- `ADIFreeSpectator::ServerReturnToPlayer` shares the identical COMDAT-folded
+  no-parameter exec thunk (`Func = 0x7FF624700B60`, `jmp [vtable+0x790]`).
+
+So the entire spectator free<->follow cheat family is **compiled out of the
+dedicated-server binary** — the implementations are hollow `ret` stubs (real code
+exists nearby at `0x...4C0`/`0x...4F0`, so this is targeted stripping, not a bad
+slot read). The logic lives only in the game CLIENT build.
+
+**Conclusion — Gate A stop condition reached for this route.** No server-side
+invocation (native or reflected Lua) can drive the shipped free<->follow
+transition, because there is nothing to drive on the server. The `08` plan's
+documented stop condition holds: the transition is client-local code with no
+server entry point, so under the no-client-mod / EAC boundary the requested
+player-controlled hybrid cannot be delivered this way. What remains deliverable
+is the banked pair: death-spectate follow (A/D) plus a one-way server-operated
+`DebugFreecam`. The Stage 3 invoker and tracer remain valid, reusable
+infrastructure for calling any *non-stubbed* server function on the game thread.
+
 ## Safety boundary
 
 Dedicated-server process only. The Steam client remains untouched and runs
 normally with EasyAntiCheat. The Stage 2 DLL changes only the guarded readiness
-call and never suppresses errors or process exits.
+call and never suppresses errors or process exits. The Stage 3 DLL only hooks
+`ProcessEvent`, stays dormant until a Lua-written marker, validates every pointer
+it is handed, and never suppresses exits.
 
 ## Rollback
 
