@@ -47,38 +47,44 @@ python dimod.py apply vanilla             # back to stock gameplay
 
 | Profile | What it does |
 |---|---|
+| `extraction` | The carrier-extraction game mode. See [docs/12](docs/12-extraction-mode.md). |
+| `native-spectator-stage2` | Death-spectator + freecam. Join as a normal player, deploy, die; then `trigger-stage2` for freecam. |
 | `vanilla` | Stock gameplay. Mods off, normal map rotation, public. |
-| `fast-lobby` | Normal maps, 10s lobby instead of 90s, 5s intro instead of 19s. |
-| `tutorial-explore` | Tutorial map as free-roam sandbox, scripted doors removed. |
-| `solo-12` | 12-player Solo via a memory-only server patch; the EOS browser may still show 8. |
-| `death-spectate` | Test the game's normal death-spectator flow. |
-| `native-spectator-stage0` | Experimental server-only no-op native loader; no spectator behavior. |
-| `native-spectator-stage1` | Experimental server-only exit and lifecycle diagnostics; no exit suppression. |
-| `native-spectator-stage2` | Experimental one-client lab: login-time faction-210 spectator plus a guarded one-shot native lobby-readiness hook. |
-| `killprobe` | Safely inventory elimination functions; does not kill while `DumpOnly=1`. |
-| `loot` | Inventory actors actually produced by every world spawn point. |
-| `discovery` | Research mode - runs the object-graph probes and writes dumps. |
+
+The research and probe profiles from the discovery phase were removed in the
+2026-09-01 cleanup, along with the mods they drove. What they established is
+written up in `docs/`; the profiles themselves were single-use.
 
 ### Spectator status
 
-No spectator profile is production-ready. `native-spectator-stage2` is a manual,
-one-client prototype. Login-time faction 210 is recognized by the untouched
-client, and the new server-only readiness hook removes the zero-combat-player
-lobby stall without entering the agent-deployment path; its first end-to-end
-test is pending. Controllable freecam works, while reliable switching between
-free movement and a camera that follows the selected agent remains incomplete.
-Two simultaneous spectators and extra spectator capacity are also unverified.
-The final target prefers additional spectator connections; consuming normal
-player slots is the accepted fallback. See the
+**What works today (2026-09-01):** the *deploy-then-spectate* flow. Join
+`native-spectator-stage2` as a normal player (do **not** arm anything), pick an
+agent, deploy, then die to a bot. The untouched client drops into the game's
+native follow-spectator — spectator HUD plus `A` / `D` cycling and following
+living agents. This is stable; the server stays up. `python dimod.py
+trigger-stage2` additionally gives a one-way `DebugFreecam` free-roam view.
+
+**What does not work, and why:** returning from freecam to follow. Native
+follow-spectating is *pawn-less* — the game creates no `DISpectatorPawn`, so its
+native free-move (`CheatSpectateFreeMove` / `DIFreeSpectator`) has no instance to
+drive. That free-move belongs to the dedicated-spectator (faction-210) pawn,
+which only exists on the login path — and that path, while it does get the
+untouched client out of the agent-select menu, runs an unstable zero-combat-player
+match (intermittent native crash in bot faction assignment). Do **not** kill a
+player with `force-death` (disabled): a raw `SetHealth(0)` kill trips the human
+killcam into a status-3 exit; only a real bot kill enters spectating cleanly.
+
+**Reaching a second human is blocked by CGNAT** on this host, so the
+additional-spectator-connection target is on hold. See the
 [`spectator feasibility and implementation plan`](docs/08-native-spectator-plan.md)
-before running the legacy experiment profiles.
+for the full route history and the remaining native option.
 
 Profiles are plain JSON in `profiles/`. Copy one and edit:
 
 ```json
 {
   "description": "shown by dimod list",
-  "mods":     { "DIConfig": true, "DIUnstick": false },
+  "mods":     { "DIConfig": true, "DIExtraction": false },
   "diconfig": { "Timing": { "LobbyWaitTime": 30 } },
   "tripwire": { "MapRotation": "Tutorial", "bIsPublic": "False" },
   "tripwire_remove": ["MapRotation"]
@@ -108,12 +114,9 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
 | Mod | Purpose |
 |---|---|
 | `DIConfig` | Applies lobby wait, intro duration, and the spectator-slot cap from `DIConfig.ini`. |
-| `DIUnstick` | Removes the 14 scripted tutorial sliding doors so the map is traversable. |
-| `DIFree` | Read-only probe of objects created by the normal death-spectator flow. |
-| `DIKill` | Probe for a proper server-side elimination call; safe by default (`DumpOnly=1`). |
-| `DILoot` | Tallies every actor produced by world spawn points during a match. |
-| `DIProbe` | Research. Deep-dumps target assets to `DIProbe_dump.txt`. |
-| `DITut` | Research. Tutorial-specific inspection. **Has crashed the server** — see docs/05. |
+| `DIExtraction` | The carrier-extraction mode: phase advance, loadout, disguise, teleport. |
+| `DINativeStage2` | Drives the death-spectator freecam route. |
+| `DINativeLifecycle` | Read-only lifecycle observer; part of the verified spectator profile. |
 
 ---
 

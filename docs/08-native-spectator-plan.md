@@ -6,7 +6,27 @@ feature.
 
 ## Decision
 
-The desired feature is **plausible, but not implemented**.
+**FINAL VERDICT (2026-09-01): the player-toggled free<->follow hybrid is not
+achievable under the constraints (untouched retail EAC client, server-side reach
+only). Closed.** Proven three ways: (1) 36 server-side routes all hit the same
+client-camera wall; (2) disassembly of the running server shows
+`CheatSpectateFreeMoveSrv` / `CheatSpectateFreeMove` / `ServerReturnToPlayer` are
+empty `ret` stubs; (3) the same static check on the game CLIENT
+`DeceiveInc-Win64-Shipping.exe` shows the free-move cheat is stubbed there too
+(while `OnSpectateNextInput`/follow input handlers are real). Free-fly spectating
+has no shipped implementation on client or server — it exists only as the
+`DebugFreecam` debug tool. The transition glue was compiled out of both shipping
+builds, and a client mod (the only place the real code could run) is ruled out.
+
+**Deliverable ceiling (works, stable):** death-spectate `A`/`D` follow of living
+agents, plus a one-way server-operated `DebugFreecam` free-flight. Two modes,
+chosen at entry, not a seamless in-game toggle. The Stage 3 ProcessEvent invoker
+and tracer remain reusable infrastructure for any non-stubbed server function.
+
+Everything below this section is the historical investigation that reached this
+verdict; it is no longer an open plan.
+
+---
 
 The game already supplies both halves of the experience:
 
@@ -25,6 +45,42 @@ That last client camera/context transition remains a blocker. Native inspection
 has also exposed a previously missed dedicated-spectator marker and the shipped
 freecam collision switch. Route 28 now preserves the marker for an isolated
 client test; it is not yet a validated feature.
+
+## Status update — 2026-09-01 (deploy-then-spectate banked)
+
+The usable result today is the **deploy-then-spectate** flow, and it is stable:
+join as a normal player, deploy, die to a bot, and the untouched client enters
+the native follow-spectator (HUD + `A` / `D` follow of living agents). The server
+stays up. `trigger-stage2` adds a one-way `DebugFreecam` free-roam.
+
+Three findings from this session refine the plan below:
+
+1. **Natural follow-spectating is pawn-less.** `FindAllOf` shows no live
+   `DISpectatorPawn` and no `DIFreeSpectator` during it; the controller keeps
+   referencing the dead spy body and the follow camera is client-driven.
+   Therefore `CheatSpectateFreeMove`/`CheatSpectateFreeMoveSrv` (methods on
+   `ADISpectatorPawn`) have no instance to run on from the death path. The native
+   free-move is a dedicated-spectator-pawn feature, reachable only where a live
+   `DISpectatorPawn` is possessed (the login/handoff path). `trigger-native-freemove`
+   was added to test this and correctly reports the pawn-less state.
+
+2. **The login path breaks the client menu wall but the match is unstable.**
+   Faction-210 login + the native readiness override get the untouched client
+   out of agent-select and into an in-world spectator camera, but the
+   zero-combat-player match intermittently hard-crashes in native
+   `UDIFactionsManager::AssignFactionToBot`. Writing the replicated
+   `bIsAutoSpectating` flag on an already-spectating client also causes a status-3
+   exit.
+
+3. **`SetHealth(0)` cannot be used to auto-convert a player.** It kills the spy
+   but the human death/killcam flow then status-3 exits; a real bot kill (full
+   damage pipeline) is the only clean entry. `force-death` is disabled for this
+   reason.
+
+The remaining route to real free↔follow is Gate A's native work, but launched
+from the *stable* death-spectator rather than the unstable login match: spawn a
+`DISpectatorPawn`, hand it to the already-spectating client, then drive
+`CheatSpectateFreeMoveSrv` / `ServerReturnToPlayer` on it. Not yet attempted.
 
 ## Product target
 
@@ -132,6 +188,26 @@ The current reflected `CheatSpectateFreeMove` attempt failed at the UE4SS call
 boundary. That does not establish that the native game path is unusable. A
 server-native hook can determine whether the function is guarded, stripped, or
 simply being invoked with the wrong context.
+
+**Built and tested (2026-09-01) — RESULT: server stubs, route closed.** The
+server-native hook was built and worked: `DINativeSpectatorStage3.dll` hooks
+`UObject::ProcessEvent` and re-invokes it on the game thread with a `(target,
+func)` pair the Lua resolver supplies (`dimod native-invoke <free|follow>`, plus
+a `dimod native-trace` tracer). It manufactured a `DISpectatorPawn` and cleanly
+dispatched `CheatSpectateFreeMoveSrv` on the game thread — but the call was a
+no-op. Disassembling the running server showed why:
+`CheatSpectateFreeMoveSrv_Implementation`, the client `CheatSpectateFreeMove`,
+and `ServerReturnToPlayer` all resolve to a hollow `ret` stub
+(`0x7FF623A0D4B0`). **The spectator free<->follow feature is compiled out of the
+dedicated-server binary.** See Route 36 in `11-native-stage2.md`.
+
+This is the **Gate A stop condition** below, now confirmed empirically: the
+shipped transition is client-local code with no server implementation, so it
+cannot be initiated server-side by any means. Under the no-client-mod / EAC
+boundary the requested player-controlled hybrid cannot be delivered via these
+functions. The deliverable ceiling is the banked pair (death-spectate A/D follow
++ one-way server `DebugFreecam`). Gate A is closed for the native-function route;
+the invoker/tracer remain reusable for any non-stubbed server function.
 
 **Pass condition:** one naturally spectating client switches free -> follow ->
 free at least 20 times, follows the target selected by `A` / `D`, and remains

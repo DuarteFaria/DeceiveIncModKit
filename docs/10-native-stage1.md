@@ -25,6 +25,9 @@ route experiment. All ordinary profiles omit `DINativeSpectatorStage1` from
   `StartPlay`, match state, controller/pawn links, player-state links, faction
   fields, and counts of spies/freecams/free spectators.
 - `tools/analyze_request_exit.py`: read-only PE/string analysis helper.
+  *(Removed in the 2026-09-01 cleanup along with the Stage 1 module it served.
+  `tools/analyze_spectator_functions.py` keeps the equivalent
+  resolve-and-disassemble recipe.)*
 
 Outputs:
 

@@ -14,10 +14,20 @@ import inject
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE = os.path.join(KIT, ".deployed.json")
-PROFILE_DLLS = {
-    "native-spectator-stage0": "DINativeSpectator.dll",
-    "native-spectator-stage1": "DINativeSpectatorStage1.dll",
-    "native-spectator-stage2": "DINativeSpectatorStage2.dll",
+# Profiles that may load native DLLs at all. Membership is the gate; the actual
+# DLL set comes from the profile's native_modules list via MODULE_DLLS below.
+NATIVE_PROFILES = {
+    "native-spectator-stage0",
+    "native-spectator-stage1",
+    "native-spectator-stage2",
+}
+# Every injectable native module maps to its built DLL name. A profile may list
+# more than one (e.g. the readiness override plus the game-thread invoker).
+MODULE_DLLS = {
+    "DINativeSpectator": "DINativeSpectator.dll",
+    "DINativeSpectatorStage1": "DINativeSpectatorStage1.dll",
+    "DINativeSpectatorStage2": "DINativeSpectatorStage2.dll",
+    "DINativeSpectatorStage3": "DINativeSpectatorStage3.dll",
 }
 EXPECTED_EXE = os.path.normcase(os.path.abspath(inject.EXE))
 
@@ -45,35 +55,47 @@ def process_path(pid):
         k32.CloseHandle(handle)
 
 
-def main():
-    state = read_json(STATE)
-    profile_name = state.get("profile")
-    dll_name = PROFILE_DLLS.get(profile_name)
+def load_one(pid, module_name):
+    """Inject a single profile-approved native module. Returns True on success
+    (already-loaded counts as success)."""
+    dll_name = MODULE_DLLS.get(module_name)
     if not dll_name:
-        raise RuntimeError("refusing native load: an approved experimental profile is not deployed")
-    profile = read_json(os.path.join(KIT, "profiles", profile_name + ".json"))
-    module_name = os.path.splitext(dll_name)[0]
-    if module_name not in profile.get("native_modules", []):
-        raise RuntimeError("refusing native load: module is absent from experimental profile")
+        raise RuntimeError(f"refusing native load: unknown module {module_name}")
     dll = os.path.join(KIT, "native", "DINativeSpectator", "build",
                        "vs2022-x64", "bin", dll_name)
     if not os.path.isfile(dll):
-        raise RuntimeError("DINativeSpectator.dll is not built; see docs/09-native-stage0.md")
+        raise RuntimeError(f"{dll_name} is not built; see docs/09-native-stage0.md")
+    if any(name.lower() == dll_name.lower() for name in inject.modules(pid)):
+        print(f"{dll_name} already loaded")
+        return True
+    result = inject.inject(pid, dll)
+    if not result:
+        raise RuntimeError(f"LoadLibraryW returned null for {dll_name}")
+    loaded = any(name.lower() == dll_name.lower() for name in inject.modules(pid))
+    print(f"{dll_name} loaded in dedicated server pid {pid}: {loaded}")
+    return loaded
+
+
+def main():
+    state = read_json(STATE)
+    profile_name = state.get("profile")
+    if profile_name not in NATIVE_PROFILES:
+        raise RuntimeError("refusing native load: an approved experimental profile is not deployed")
+    profile = read_json(os.path.join(KIT, "profiles", profile_name + ".json"))
+    modules = [m for m in profile.get("native_modules", []) if m in MODULE_DLLS]
+    if not modules:
+        raise RuntimeError("refusing native load: no approved module in experimental profile")
     pid = inject.find_pid()
     if not pid:
         raise RuntimeError("dedicated-server process not found")
     actual_exe = process_path(pid)
     if actual_exe != EXPECTED_EXE:
         raise RuntimeError(f"refusing unexpected process path: {actual_exe}")
-    if any(name.lower() == dll_name.lower() for name in inject.modules(pid)):
-        print(f"{dll_name} already loaded")
-        return 0
-    result = inject.inject(pid, dll)
-    if not result:
-        raise RuntimeError("LoadLibraryW returned null")
-    loaded = any(name.lower() == dll_name.lower() for name in inject.modules(pid))
-    print(f"{dll_name} loaded in dedicated server pid {pid}: {loaded}")
-    return 0 if loaded else 1
+    # Inject every listed module; report failure if any did not load.
+    ok = True
+    for module_name in modules:
+        ok = load_one(pid, module_name) and ok
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

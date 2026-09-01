@@ -1,8 +1,0 @@
-{
-  "description": "Research mode: runs the object-graph probes, writes dump files.",
-  "mods": { "DIProbe": true, "DIConfig": true },
-  "diconfig": {
-    "Timing": { "LobbyWaitTime": 90, "IntroPhaseTime": 19 }
-  },
-  "tripwire": { "bIsPublic": "False" }
-}

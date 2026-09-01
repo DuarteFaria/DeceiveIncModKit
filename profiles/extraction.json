@@ -1,0 +1,27 @@
+{
+  "description": "Carrier-extraction mode: normal Solo match vs bots; trigger-extraction fast-forwards VAULT_LOCKED->VAULT_UNLOCKED and teleports the designated carrier to the briefcase, then the stock endgame (grab, hunt, extract) plays out.",
+  "mods": {
+    "DIConfig": true,
+    "DIExtraction": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Extraction": {
+      "AutoArm": 1,
+      "AutoLoadout": 1,
+      "Disguise": "purple"
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "bSandboxMode": "True",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "True",
+    "bEnableUPnP": "True",
+    "AutoShutdownEmptyMinutes": "60"
+  }
+}
