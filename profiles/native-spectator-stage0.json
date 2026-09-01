@@ -1,0 +1,23 @@
+{
+  "description": "EXPERIMENTAL SERVER-ONLY Stage 0: load the no-op DINativeSpectator DLL; no spectator behavior.",
+  "mods": {
+    "DIConfig": true
+  },
+  "native_modules": [
+    "DINativeSpectator"
+  ],
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False"
+  }
+}

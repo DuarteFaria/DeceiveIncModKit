@@ -1,0 +1,376 @@
+
+############ SCAN t+20s ############
+
+---------- PregameLobbyMapData: 1 instance(s)
+
+=== PregameLobbyMapData /Game/Levels/LVL_SharedLevels/LVL_PreGameLobby/DA_PregameLobbyMapData_PregameLobby.DA_PregameLobbyMapData_PregameLobby
+  [PregameLobbyMapData]
+    PregameLobbyPhaseData:
+        DefaultPhaseDuration = 90
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = PregameLobbyMapData
+
+---------- DIObjectSpawnPresetsDataAsset: 1 instance(s)
+
+=== DIObjectSpawnPresetsDataAsset /Game/Levels/DA_ObjectSpawnPresets_Default.DA_ObjectSpawnPresets_Default
+  [DIObjectSpawnPresetsDataAsset]
+    InVaultPresets:
+        ObjectsToSpawn:  (0 entries)
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = ObjectSpawnerPresetData
+
+---------- ObjectSpawningManager: 1 instance(s)
+
+=== BP_ObjectSpawningManager_C /Game/Levels/LVL_FragrantShore/Sublevels/GPI_FragrantShore.GPI_FragrantShore:PersistentLevel.BP_ObjectSpawningManager_2
+  [BP_ObjectSpawningManager_C]
+    DefaultSceneRoot = SceneComponent /Game/Levels/LVL_FragrantShore/Sublevels/GPI_FragrantShore.GPI_FragrantShore:PersistentLevel.BP_ObjectSpawningManager_2.DefaultSceneRoot
+  [ObjectSpawningManager]
+    FillingObjectsMaxWeightFactor = 45.0
+
+---------- DIPopulationManagerNPCSuspiciousnessDataAsset: 1 instance(s)
+
+=== DIPopulationManagerNPCSuspiciousnessDataAsset /Game/Levels/DA_NPCSuspiciousness_Default.DA_NPCSuspiciousness_Default
+  [DIPopulationManagerNPCSuspiciousnessDataAsset]
+    NPCSuspiciousness:  (5 entries)
+      [1]
+          RankPercentage = 1.0
+      [2]
+          RankPercentage = 2.0
+      [3]
+          RankPercentage = 5.0
+      [4]
+          RankPercentage = 15.0
+      [5]
+          RankPercentage = 20.0
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = PopulationManagerNPCSuspiciousnessData
+
+---------- MapData: 10 instance(s)
+
+=== MapData /Game/Levels/LVL_Hardsell/DA_MapData_Hardsell.DA_MapData_Hardsell
+  [MapData]
+    MapFileName = LVL_Hardsell
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Silverreef/DA_MapData_Silverreef.DA_MapData_Silverreef
+  [MapData]
+    MapFileName = LVL_Silverreef
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Diamondspire/DA_MapData_Diamondspire.DA_MapData_Diamondspire
+  [MapData]
+    MapFileName = LVL_Diamondspire
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_FragrantShore/DA_MapData_FragrantShore.DA_MapData_FragrantShore
+  [MapData]
+    MapFileName = LVL_FragrantShore
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_SoundEclipse/DA_MapData_SoundEclipse.DA_MapData_SoundEclipse
+  [MapData]
+    MapFileName = LVL_Soundeclipse
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Hardsell/DA_MapData_Hardsell_Day.DA_MapData_Hardsell_Day
+  [MapData]
+    MapFileName = LVL_Variant_HardSell_Day
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_FragrantShore/DA_MapData_FragrantShore_Night.DA_MapData_FragrantShore_Night
+  [MapData]
+    MapFileName = LVL_Variant_FragrantShore_Night
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Tutorial/DA_MapData_Tutorial.DA_MapData_Tutorial
+  [MapData]
+    MapFileName = LVL_Tutorial
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Tutorial/DA_MapData_TrainingRange.DA_MapData_TrainingRange
+  [MapData]
+    MapFileName = LVL_TrainingRange
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_PrivateLobby/DA_MapData_PrivateLobby.DA_MapData_PrivateLobby
+  [MapData]
+    MapFileName = LVL_PrivateLobby
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+---------- SpyGameModeMapData: 8 instance(s)
+
+=== SpyGameModeMapData /Game/Levels/LVL_Hardsell/DA_SpyGameModeMapData_Hardsell.DA_SpyGameModeMapData_Hardsell
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Silverreef/DA_SpyGameModeMapData_Silverreef.DA_SpyGameModeMapData_Silverreef
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Diamondspire/DA_SpyGameModeMapData_DiamondSpire.DA_SpyGameModeMapData_DiamondSpire
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_FragrantShore/DA_SpyGameModeMapData_FragrantShore.DA_SpyGameModeMapData_FragrantShore
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_SoundEclipse/DA_SpyGameModeMapData_SoundEclipse.DA_SpyGameModeMapData_SoundEclipse
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/DA_SpyGameModeMapData_Default.DA_SpyGameModeMapData_Default
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/DA_SpyGameModeMapData_TrainingRange.DA_SpyGameModeMapData_TrainingRange
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Tutorial/DA_SpyGameModeMapData_Tutorial.DA_SpyGameModeMapData_Tutorial
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+############ END t+20s ############
+
+############ SCAN t+120s ############
+
+---------- PregameLobbyMapData: 1 instance(s)
+
+=== PregameLobbyMapData /Game/Levels/LVL_SharedLevels/LVL_PreGameLobby/DA_PregameLobbyMapData_PregameLobby.DA_PregameLobbyMapData_PregameLobby
+  [PregameLobbyMapData]
+    PregameLobbyPhaseData:
+        DefaultPhaseDuration = 90
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = PregameLobbyMapData
+
+---------- DIObjectSpawnPresetsDataAsset: 1 instance(s)
+
+=== DIObjectSpawnPresetsDataAsset /Game/Levels/DA_ObjectSpawnPresets_Default.DA_ObjectSpawnPresets_Default
+  [DIObjectSpawnPresetsDataAsset]
+    InVaultPresets:
+        ObjectsToSpawn:  (0 entries)
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = ObjectSpawnerPresetData
+
+---------- ObjectSpawningManager: 1 instance(s)
+
+=== BP_ObjectSpawningManager_C /Game/Levels/LVL_FragrantShore/Sublevels/GPI_FragrantShore.GPI_FragrantShore:PersistentLevel.BP_ObjectSpawningManager_2
+  [BP_ObjectSpawningManager_C]
+    DefaultSceneRoot = SceneComponent /Game/Levels/LVL_FragrantShore/Sublevels/GPI_FragrantShore.GPI_FragrantShore:PersistentLevel.BP_ObjectSpawningManager_2.DefaultSceneRoot
+  [ObjectSpawningManager]
+    FillingObjectsMaxWeightFactor = 45.0
+
+---------- DIPopulationManagerNPCSuspiciousnessDataAsset: 1 instance(s)
+
+=== DIPopulationManagerNPCSuspiciousnessDataAsset /Game/Levels/DA_NPCSuspiciousness_Default.DA_NPCSuspiciousness_Default
+  [DIPopulationManagerNPCSuspiciousnessDataAsset]
+    NPCSuspiciousness:  (5 entries)
+      [1]
+          RankPercentage = 1.0
+      [2]
+          RankPercentage = 2.0
+      [3]
+          RankPercentage = 5.0
+      [4]
+          RankPercentage = 15.0
+      [5]
+          RankPercentage = 20.0
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = PopulationManagerNPCSuspiciousnessData
+
+---------- MapData: 10 instance(s)
+
+=== MapData /Game/Levels/LVL_Hardsell/DA_MapData_Hardsell.DA_MapData_Hardsell
+  [MapData]
+    MapFileName = LVL_Hardsell
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Silverreef/DA_MapData_Silverreef.DA_MapData_Silverreef
+  [MapData]
+    MapFileName = LVL_Silverreef
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Diamondspire/DA_MapData_Diamondspire.DA_MapData_Diamondspire
+  [MapData]
+    MapFileName = LVL_Diamondspire
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_FragrantShore/DA_MapData_FragrantShore.DA_MapData_FragrantShore
+  [MapData]
+    MapFileName = LVL_FragrantShore
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_SoundEclipse/DA_MapData_SoundEclipse.DA_MapData_SoundEclipse
+  [MapData]
+    MapFileName = LVL_Soundeclipse
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Hardsell/DA_MapData_Hardsell_Day.DA_MapData_Hardsell_Day
+  [MapData]
+    MapFileName = LVL_Variant_HardSell_Day
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_FragrantShore/DA_MapData_FragrantShore_Night.DA_MapData_FragrantShore_Night
+  [MapData]
+    MapFileName = LVL_Variant_FragrantShore_Night
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Tutorial/DA_MapData_Tutorial.DA_MapData_Tutorial
+  [MapData]
+    MapFileName = LVL_Tutorial
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_Tutorial/DA_MapData_TrainingRange.DA_MapData_TrainingRange
+  [MapData]
+    MapFileName = LVL_TrainingRange
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+=== MapData /Game/Levels/LVL_PrivateLobby/DA_MapData_PrivateLobby.DA_MapData_PrivateLobby
+  [MapData]
+    MapFileName = LVL_PrivateLobby
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = MapData
+
+---------- SpyGameModeMapData: 8 instance(s)
+
+=== SpyGameModeMapData /Game/Levels/LVL_Hardsell/DA_SpyGameModeMapData_Hardsell.DA_SpyGameModeMapData_Hardsell
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Silverreef/DA_SpyGameModeMapData_Silverreef.DA_SpyGameModeMapData_Silverreef
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Diamondspire/DA_SpyGameModeMapData_DiamondSpire.DA_SpyGameModeMapData_DiamondSpire
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_FragrantShore/DA_SpyGameModeMapData_FragrantShore.DA_SpyGameModeMapData_FragrantShore
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_SoundEclipse/DA_SpyGameModeMapData_SoundEclipse.DA_SpyGameModeMapData_SoundEclipse
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 19
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/DA_SpyGameModeMapData_Default.DA_SpyGameModeMapData_Default
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/DA_SpyGameModeMapData_TrainingRange.DA_SpyGameModeMapData_TrainingRange
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+
+=== SpyGameModeMapData /Game/Levels/LVL_Tutorial/DA_SpyGameModeMapData_Tutorial.DA_SpyGameModeMapData_Tutorial
+  [SpyGameModeMapData]
+    IntroPhaseData:
+        DefaultPhaseDuration = 5
+  [DIPrimaryDataAsset]
+    AssetType:
+        Name = SpyGameModeMapData
+############ END t+120s ############

@@ -1,0 +1,16 @@
+{
+  "description": "Full object-graph census vs bots. 3 snapshots -> DICensus_dump.txt. Read-only.",
+  "mods": {
+    "DICensus": true,
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    }
+  },
+  "tripwire": {
+    "bIsPublic": "False"
+  }
+}

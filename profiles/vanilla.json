@@ -1,0 +1,11 @@
+{
+  "description": "Stock gameplay. All custom mods off, normal map rotation.",
+  "mods": {},
+  "diconfig": {},
+  "tripwire": {
+    "bIsPublic": "True"
+  },
+  "tripwire_remove": [
+    "MapRotation"
+  ]
+}

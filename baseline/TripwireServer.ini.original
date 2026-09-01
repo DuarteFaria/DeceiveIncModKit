@@ -1,0 +1,10 @@
+[/Script/DeceiveInc.TripwireServerSettings]
+ServerName=Glass Cannon
+MaxPlayers=8
+GameMode=Solo
+Platform=PC
+bIsPublic=True
+bIsOfficial=False
+BotsAmount=8
+BotsDifficulty=Difficult
+

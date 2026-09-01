@@ -1,0 +1,16 @@
+{
+  "description": "Inventory what actually spawns: walks all spawn points, tallies SpawnedActor.",
+  "mods": {
+    "DILoot": true,
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    }
+  },
+  "tripwire": {
+    "bIsPublic": "False"
+  }
+}

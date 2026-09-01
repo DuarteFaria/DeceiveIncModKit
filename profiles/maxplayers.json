@@ -1,0 +1,21 @@
+{
+  "description": "Find a writable MaxPlayers past the 1-8 startup clamp. Read-only, no need to join.",
+  "mods": {
+    "DIConfig": true,
+    "DIPlayers": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 10,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "MaxPlayers": "12",
+    "BotsAmount": "8",
+    "bIsPublic": "False"
+  }
+}

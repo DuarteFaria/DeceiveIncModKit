@@ -1,0 +1,6 @@
+{
+  "description": "Read-only: dump the match game state to find what drives the pregame countdown.",
+  "mods": { "DIPhase": true },
+  "diconfig": {},
+  "tripwire": { "bIsPublic": "False" }
+}

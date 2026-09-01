@@ -1,0 +1,602 @@
+
+################ DISpawn v2 t+60s  (ReadObjectRefs=0) ################
+
+======== BP_ObjectSpawn_Generic_C
+   instances: 1010
+
+  functions on BP_ObjectSpawn_Generic_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_Generic_C #1 :: BP_ObjectSpawn_Generic_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_Generic123
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_Generic_C #2 :: BP_ObjectSpawn_Generic_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_Generic129
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_BigLootable_C
+   instances: 13
+
+  functions on BP_ObjectSpawn_BigLootable_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_BigLootable_C #1 :: BP_ObjectSpawn_BigLootable_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_BigLootable13
+  [BP_ObjectSpawn_BigLootable_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_BigLootable_C #2 :: BP_ObjectSpawn_BigLootable_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_BigLootable15
+  [BP_ObjectSpawn_BigLootable_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_LAFBoxes_C
+   instances: 8
+
+  functions on BP_ObjectSpawn_LAFBoxes_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_LAFBoxes_C #1 :: BP_ObjectSpawn_LAFBoxes_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_Generic293
+  [BP_ObjectSpawn_LAFBoxes_C]
+     SM_Hackable_LVL3  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_LAFBoxes_C #2 :: BP_ObjectSpawn_LAFBoxes_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_Generic297
+  [BP_ObjectSpawn_LAFBoxes_C]
+     SM_Hackable_LVL3  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_VaultPrinter_C
+   instances: 32
+
+  functions on BP_ObjectSpawn_VaultPrinter_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_VaultPrinter_C #1 :: BP_ObjectSpawn_VaultPrinter_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_VaultPrinter10
+  [BP_ObjectSpawn_VaultPrinter_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_VaultPrinter_C #2 :: BP_ObjectSpawn_VaultPrinter_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_VaultPrinter11
+  [BP_ObjectSpawn_VaultPrinter_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_Small_Object_Spawn_C
+   instances: 2
+
+  functions on BP_Small_Object_Spawn_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_Small_Object_Spawn_C #1 :: BP_Small_Object_Spawn_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_Small_Object_Spawn2_2
+  [BP_Small_Object_Spawn_C]
+     keycard  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_Small_Object_Spawn_C #2 :: BP_Small_Object_Spawn_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_Small_Object_Spawn_2
+  [BP_Small_Object_Spawn_C]
+     keycard  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawningManager_C
+   instances: 1
+
+  functions on BP_ObjectSpawningManager_C:
+     ObjectSpawningManager::HandleAllRoomsSetup
+
+--- BP_ObjectSpawningManager_C #1 :: BP_ObjectSpawningManager_C /Game/Levels/LVL_SoundEclipse/Sublevels/Navigation_SoundEclipse.Navigation_SoundEclipse:PersistentLevel.BP_ObjectSpawningManager
+  [BP_ObjectSpawningManager_C]
+     DefaultSceneRoot  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawningManager]
+     FillingObjectsMaxWeightFactor  [FloatProperty]
+         = 45.0
+
+======== DIObjectSpawnPresetsDataAsset
+   instances: 1
+
+  functions on DIObjectSpawnPresetsDataAsset:
+     DIPrimaryDataAsset::GetIdentifierString
+
+--- DIObjectSpawnPresetsDataAsset #1 :: DIObjectSpawnPresetsDataAsset /Game/Levels/DA_ObjectSpawnPresets_Default.DA_ObjectSpawnPresets_Default
+  [DIObjectSpawnPresetsDataAsset]
+     InVaultPresets  [StructProperty]
+         ObjectsToSpawn  [ArrayProperty]
+             (0 entries)
+  [DIPrimaryDataAsset]
+     AssetType  [StructProperty]
+         Name  [NameProperty]
+             = ObjectSpawnerPresetData
+
+======== DeceiveIncMatchGameState
+   instances: 1
+
+  functions on DeceiveIncMatchGameState:
+     BP_DeceiveIncMatchGameState_C::ReceiveBeginPlay
+     DeceiveIncGameStateBase::SetPauseTimer
+     DeceiveIncMatchGameState::ShouldShowTimer
+     GameState::OnRep_MatchState
+     GameStateBase::OnRep_SpectatorClass
+
+--- DeceiveIncMatchGameState #1 :: BP_DeceiveIncMatchGameState_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncMatchGameState_C_2147481044
+  [BP_DeceiveIncMatchGameState_C]
+     UberGraphFrame  [StructProperty]
+  [DeceiveIncMainGameState]
+     (no own properties)
+  [DeceiveIncMatchGameState]
+     OnPregameLobbyGamePhaseStart  [?]
+         <read error>
+  [DeceiveIncGameStateBase]
+     OnMatchStateChanged  [?]
+         <read error>
+  [GameState]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameStateBase]
+     GameModeClass  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [Info]
+     (no own properties)
+
+======== BP_DeceiveIncMatchGameState_C
+   instances: 1
+
+  functions on BP_DeceiveIncMatchGameState_C:
+     BP_DeceiveIncMatchGameState_C::ReceiveBeginPlay
+     DeceiveIncGameStateBase::SetPauseTimer
+     DeceiveIncMatchGameState::ShouldShowTimer
+     GameState::OnRep_MatchState
+     GameStateBase::OnRep_SpectatorClass
+
+--- BP_DeceiveIncMatchGameState_C #1 :: BP_DeceiveIncMatchGameState_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncMatchGameState_C_2147481044
+  [BP_DeceiveIncMatchGameState_C]
+     UberGraphFrame  [StructProperty]
+  [DeceiveIncMainGameState]
+     (no own properties)
+  [DeceiveIncMatchGameState]
+     OnPregameLobbyGamePhaseStart  [?]
+         <read error>
+  [DeceiveIncGameStateBase]
+     OnMatchStateChanged  [?]
+         <read error>
+  [GameState]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameStateBase]
+     GameModeClass  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [Info]
+     (no own properties)
+
+======== BP_DeceiveIncSpyGameState_C
+   instances: 0
+
+======== BP_DeceiveIncBaseGameMode_C
+   instances: 1
+
+  functions on BP_DeceiveIncBaseGameMode_C:
+     DeceiveIncGameModeBase::UpdatePS5MatchResponsibility
+     GameMode::StartMatch
+     GameModeBase::StartPlay
+
+--- BP_DeceiveIncBaseGameMode_C #1 :: BP_DeceiveIncBaseGameMode_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncBaseGameMode_C_2147482108
+  [BP_DeceiveIncBaseGameMode_C]
+     DefaultSceneRoot  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [DeceiveIncGameModeBase]
+     OnPostLogin  [?]
+         <read error>
+  [GameMode]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameModeBase]
+     OptionsString  [StrProperty]
+         = ?Name=Player
+  [Info]
+     (no own properties)
+
+======== DIAllowedGameModesHandler
+   instances: 1
+
+  functions on DIAllowedGameModesHandler:
+     DIAllowedGameModesHandler::GetAllowedGameModes
+
+--- DIAllowedGameModesHandler #1 :: DIAllowedGameModesHandler /Engine/Transient.DIAllowedGameModesHandler_2147482452
+  [DIAllowedGameModesHandler]
+     (no own properties)
+
+======== DIPopulationManagerNPCSuspiciousnessDataAsset
+   instances: 1
+
+  functions on DIPopulationManagerNPCSuspiciousnessDataAsset:
+     DIPrimaryDataAsset::GetIdentifierString
+
+--- DIPopulationManagerNPCSuspiciousnessDataAsset #1 :: DIPopulationManagerNPCSuspiciousnessDataAsset /Game/Levels/DA_NPCSuspiciousness_Default.DA_NPCSuspiciousness_Default
+  [DIPopulationManagerNPCSuspiciousnessDataAsset]
+     NPCSuspiciousness  [ArrayProperty]
+         (5 entries)
+         [1]
+             RankPercentage  [FloatProperty]
+                 = 1.0
+         [2]
+             RankPercentage  [FloatProperty]
+                 = 2.0
+         [3]
+             RankPercentage  [FloatProperty]
+                 = 5.0
+         [4]
+             RankPercentage  [FloatProperty]
+                 = 15.0
+         [5]
+             RankPercentage  [FloatProperty]
+                 = 20.0
+  [DIPrimaryDataAsset]
+     AssetType  [StructProperty]
+         Name  [NameProperty]
+             = PopulationManagerNPCSuspiciousnessData
+
+======== NPCBehaviorDefault
+   instances: 665
+
+  functions on NPCBehaviorDefault:
+     ActorComponent::ToggleActive
+
+--- NPCBehaviorDefault #1 :: NPCBehaviorDefault /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_NPCAI_C_2147471881.Default Behavior
+  [NPCBehaviorDefault]
+     ChancesToInteract  [FloatProperty]
+         = 28.0
+  [NPCBehavior]
+     (no own properties)
+  [ActorComponent]
+     PrimaryComponentTick  [StructProperty]
+
+--- NPCBehaviorDefault #2 :: NPCBehaviorDefault /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_NPCAI_C_2147477106.Default Behavior
+  [NPCBehaviorDefault]
+     ChancesToInteract  [FloatProperty]
+         = 28.0
+  [NPCBehavior]
+     (no own properties)
+  [ActorComponent]
+     PrimaryComponentTick  [StructProperty]
+
+################ END t+60s ################
+
+################ DISpawn v2 t+180s  (ReadObjectRefs=0) ################
+
+======== BP_ObjectSpawn_Generic_C
+   instances: 1010
+
+  functions on BP_ObjectSpawn_Generic_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_Generic_C #1 :: BP_ObjectSpawn_Generic_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_Generic123
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_Generic_C #2 :: BP_ObjectSpawn_Generic_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_Generic129
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_BigLootable_C
+   instances: 13
+
+  functions on BP_ObjectSpawn_BigLootable_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_BigLootable_C #1 :: BP_ObjectSpawn_BigLootable_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_BigLootable13
+  [BP_ObjectSpawn_BigLootable_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_BigLootable_C #2 :: BP_ObjectSpawn_BigLootable_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_BigLootable15
+  [BP_ObjectSpawn_BigLootable_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_LAFBoxes_C
+   instances: 8
+
+  functions on BP_ObjectSpawn_LAFBoxes_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_LAFBoxes_C #1 :: BP_ObjectSpawn_LAFBoxes_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_Generic293
+  [BP_ObjectSpawn_LAFBoxes_C]
+     SM_Hackable_LVL3  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_LAFBoxes_C #2 :: BP_ObjectSpawn_LAFBoxes_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_ObjectSpawn_Generic297
+  [BP_ObjectSpawn_LAFBoxes_C]
+     SM_Hackable_LVL3  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawn_VaultPrinter_C
+   instances: 32
+
+  functions on BP_ObjectSpawn_VaultPrinter_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_ObjectSpawn_VaultPrinter_C #1 :: BP_ObjectSpawn_VaultPrinter_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_VaultPrinter10
+  [BP_ObjectSpawn_VaultPrinter_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_ObjectSpawn_VaultPrinter_C #2 :: BP_ObjectSpawn_VaultPrinter_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_ObjectSpawn_VaultPrinter11
+  [BP_ObjectSpawn_VaultPrinter_C]
+     NavModifier  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_Small_Object_Spawn_C
+   instances: 2
+
+  functions on BP_Small_Object_Spawn_C:
+     ObjectSpawn::UpdateConnectedRoomsReference
+
+--- BP_Small_Object_Spawn_C #1 :: BP_Small_Object_Spawn_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_Small_Object_Spawn2_2
+  [BP_Small_Object_Spawn_C]
+     keycard  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+--- BP_Small_Object_Spawn_C #2 :: BP_Small_Object_Spawn_C /Game/Levels/LVL_SoundEclipse/Sublevels/GPI_SoundEclipse.GPI_SoundEclipse:PersistentLevel.BP_Small_Object_Spawn_2
+  [BP_Small_Object_Spawn_C]
+     keycard  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [BP_ObjectSpawn_Generic_C]
+     SM_Hackable_LVL2  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawn]
+     SpawnedActor  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+
+======== BP_ObjectSpawningManager_C
+   instances: 1
+
+  functions on BP_ObjectSpawningManager_C:
+     ObjectSpawningManager::HandleAllRoomsSetup
+
+--- BP_ObjectSpawningManager_C #1 :: BP_ObjectSpawningManager_C /Game/Levels/LVL_SoundEclipse/Sublevels/Navigation_SoundEclipse.Navigation_SoundEclipse:PersistentLevel.BP_ObjectSpawningManager
+  [BP_ObjectSpawningManager_C]
+     DefaultSceneRoot  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [ObjectSpawningManager]
+     FillingObjectsMaxWeightFactor  [FloatProperty]
+         = 45.0
+
+======== DIObjectSpawnPresetsDataAsset
+   instances: 1
+
+  functions on DIObjectSpawnPresetsDataAsset:
+     DIPrimaryDataAsset::GetIdentifierString
+
+--- DIObjectSpawnPresetsDataAsset #1 :: DIObjectSpawnPresetsDataAsset /Game/Levels/DA_ObjectSpawnPresets_Default.DA_ObjectSpawnPresets_Default
+  [DIObjectSpawnPresetsDataAsset]
+     InVaultPresets  [StructProperty]
+         ObjectsToSpawn  [ArrayProperty]
+             (0 entries)
+  [DIPrimaryDataAsset]
+     AssetType  [StructProperty]
+         Name  [NameProperty]
+             = ObjectSpawnerPresetData
+
+======== DeceiveIncMatchGameState
+   instances: 1
+
+  functions on DeceiveIncMatchGameState:
+     BP_DeceiveIncMatchGameState_C::ReceiveBeginPlay
+     DeceiveIncGameStateBase::SetPauseTimer
+     DeceiveIncMatchGameState::ShouldShowTimer
+     GameState::OnRep_MatchState
+     GameStateBase::OnRep_SpectatorClass
+
+--- DeceiveIncMatchGameState #1 :: BP_DeceiveIncMatchGameState_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncMatchGameState_C_2147481044
+  [BP_DeceiveIncMatchGameState_C]
+     UberGraphFrame  [StructProperty]
+  [DeceiveIncMainGameState]
+     (no own properties)
+  [DeceiveIncMatchGameState]
+     OnPregameLobbyGamePhaseStart  [?]
+         <read error>
+  [DeceiveIncGameStateBase]
+     OnMatchStateChanged  [?]
+         <read error>
+  [GameState]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameStateBase]
+     GameModeClass  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [Info]
+     (no own properties)
+
+======== BP_DeceiveIncMatchGameState_C
+   instances: 1
+
+  functions on BP_DeceiveIncMatchGameState_C:
+     BP_DeceiveIncMatchGameState_C::ReceiveBeginPlay
+     DeceiveIncGameStateBase::SetPauseTimer
+     DeceiveIncMatchGameState::ShouldShowTimer
+     GameState::OnRep_MatchState
+     GameStateBase::OnRep_SpectatorClass
+
+--- BP_DeceiveIncMatchGameState_C #1 :: BP_DeceiveIncMatchGameState_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncMatchGameState_C_2147481044
+  [BP_DeceiveIncMatchGameState_C]
+     UberGraphFrame  [StructProperty]
+  [DeceiveIncMainGameState]
+     (no own properties)
+  [DeceiveIncMatchGameState]
+     OnPregameLobbyGamePhaseStart  [?]
+         <read error>
+  [DeceiveIncGameStateBase]
+     OnMatchStateChanged  [?]
+         <read error>
+  [GameState]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameStateBase]
+     GameModeClass  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [Info]
+     (no own properties)
+
+======== BP_DeceiveIncSpyGameState_C
+   instances: 0
+
+======== BP_DeceiveIncBaseGameMode_C
+   instances: 1
+
+  functions on BP_DeceiveIncBaseGameMode_C:
+     DeceiveIncGameModeBase::UpdatePS5MatchResponsibility
+     GameMode::StartMatch
+     GameModeBase::StartPlay
+
+--- BP_DeceiveIncBaseGameMode_C #1 :: BP_DeceiveIncBaseGameMode_C /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_DeceiveIncBaseGameMode_C_2147482108
+  [BP_DeceiveIncBaseGameMode_C]
+     DefaultSceneRoot  [ObjectProperty]
+         <ref not read; set [Probe] ReadObjectRefs=1>
+  [DeceiveIncGameModeBase]
+     OnPostLogin  [?]
+         <read error>
+  [GameMode]
+     MatchState  [NameProperty]
+         = InProgress
+  [GameModeBase]
+     OptionsString  [StrProperty]
+         = ?Name=Player
+  [Info]
+     (no own properties)
+
+======== DIAllowedGameModesHandler
+   instances: 1
+
+  functions on DIAllowedGameModesHandler:
+     DIAllowedGameModesHandler::GetAllowedGameModes
+
+--- DIAllowedGameModesHandler #1 :: DIAllowedGameModesHandler /Engine/Transient.DIAllowedGameModesHandler_2147482452
+  [DIAllowedGameModesHandler]
+     (no own properties)
+
+======== DIPopulationManagerNPCSuspiciousnessDataAsset
+   instances: 1
+
+  functions on DIPopulationManagerNPCSuspiciousnessDataAsset:
+     DIPrimaryDataAsset::GetIdentifierString
+
+--- DIPopulationManagerNPCSuspiciousnessDataAsset #1 :: DIPopulationManagerNPCSuspiciousnessDataAsset /Game/Levels/DA_NPCSuspiciousness_Default.DA_NPCSuspiciousness_Default
+  [DIPopulationManagerNPCSuspiciousnessDataAsset]
+     NPCSuspiciousness  [ArrayProperty]
+         (5 entries)
+         [1]
+             RankPercentage  [FloatProperty]
+                 = 1.0
+         [2]
+             RankPercentage  [FloatProperty]
+                 = 2.0
+         [3]
+             RankPercentage  [FloatProperty]
+                 = 5.0
+         [4]
+             RankPercentage  [FloatProperty]
+                 = 15.0
+         [5]
+             RankPercentage  [FloatProperty]
+                 = 20.0
+  [DIPrimaryDataAsset]
+     AssetType  [StructProperty]
+         Name  [NameProperty]
+             = PopulationManagerNPCSuspiciousnessData
+
+======== NPCBehaviorDefault
+   instances: 662
+
+  functions on NPCBehaviorDefault:
+     ActorComponent::ToggleActive
+
+--- NPCBehaviorDefault #1 :: NPCBehaviorDefault /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_NPCAI_C_2147477106.Default Behavior
+  [NPCBehaviorDefault]
+     ChancesToInteract  [FloatProperty]
+         = 28.0
+  [NPCBehavior]
+     (no own properties)
+  [ActorComponent]
+     PrimaryComponentTick  [StructProperty]
+
+--- NPCBehaviorDefault #2 :: NPCBehaviorDefault /Game/Levels/LVL_SoundEclipse/LVL_Soundeclipse.LVL_Soundeclipse:PersistentLevel.BP_NPCAI_C_2147477097.Default Behavior
+  [NPCBehaviorDefault]
+     ChancesToInteract  [FloatProperty]
+         = 28.0
+  [NPCBehavior]
+     (no own properties)
+  [ActorComponent]
+     PrimaryComponentTick  [StructProperty]
+
+################ END t+180s ################

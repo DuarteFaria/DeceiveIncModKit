@@ -1,0 +1,19 @@
+{
+  "description": "Probe the spectator system: which spectate/cheat functions are reflected. Read-only.",
+  "mods": {
+    "DISpec": true,
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Probe": {
+      "ReadObjectRefs": 0
+    }
+  },
+  "tripwire": {
+    "bIsPublic": "False"
+  }
+}

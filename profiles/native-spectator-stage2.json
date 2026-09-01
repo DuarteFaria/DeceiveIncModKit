@@ -1,0 +1,27 @@
+{
+  "description": "EXPERIMENTAL one-client lab: faction-210 login, stock pregame advancement, and synthetic human accounting for the abandonment watchdog.",
+  "mods": {
+    "DIConfig": true,
+    "DINativeLifecycle": true,
+    "DINativeStage2": true
+  },
+  "native_modules": [
+    "DINativeSpectatorStage2"
+  ],
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Spectator": {
+      "MaxSpectators": 4
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False",
+    "AutoShutdownEmptyMinutes": "60"
+  }
+}
