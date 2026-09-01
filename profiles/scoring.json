@@ -1,0 +1,19 @@
+{
+  "description": "Ranked MP scoring recon. Hooks HandleXPEvent + polls XpData; auto-reports at match end to DIScore.log. Read-only.",
+  "mods": {
+    "DIScore": true,
+    "DIConfig": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False"
+  }
+}
