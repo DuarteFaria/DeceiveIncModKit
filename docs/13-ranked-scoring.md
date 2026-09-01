@@ -89,12 +89,31 @@ Stage 3 native invoker, not Lua hooks. Since the XP gate is open, that is moot.
   so they now lead and NetConnection is corroboration only, logged as
   `DISAGREE` if it ever contradicts them.
 
-**Still unverified:** every objective counter except `Kill` read zero, because
-the match had not reached those phases. `EnterVault`, `FirstObjectivePickup`,
-`PickupObjective`, `VaultComputer` and `ReticalScanner` are structurally
-present and correctly capped, but have not yet been observed non-zero. `bWon`
-was `false` for all players, so the +7 win rule is also untested. A match played
-through to the result screen closes both.
+## Second run: full match, 2026-09-01
+
+`LVL_Silverreef`, played through to `GamePhase=7` with `MatchResult=2`
+(`MissionSucess_LastManStanding`). Both fixes verified and the win rule closed.
+
+- **Auto-report fired on its own** at the result screen — the phase watcher
+  works and re-arms.
+- **Bot detection is correct for all 8.** Ihelane read
+  `bIsABot=false, Spy.bIsBot=false, NetConnection=true`; every bot read
+  `false/…/NetConnection=false`. With the `IsValid()` check in place
+  NetConnection is now accurate too, and all three signals agree — no
+  `DISAGREE` lines.
+- **The +7 win rule works.** Bot "Hans" had `bWon=true` and scored
+  `Kill x3 @2 = 6` + `MatchWin x1 @7 = 7` = **13 MP**. Three other bots scored
+  2 MP each on one kill; the human scored 0.
+
+`DIVERGE` reporting is now gated behind `hook_fires > 0`, so a permanently dead
+hook stops printing `poll=N hook=0` against every scored event.
+
+**Still unobserved:** `EnterVault`, `FirstObjectivePickup`, `PickupObjective`,
+`VaultComputer` and `ReticalScanner` have not yet been seen non-zero. That is
+not a defect — this match ended by last-man-standing, so nobody hacked a
+terminal, entered the vault or touched the package. Closing it needs a match
+where those objectives are actually played. The counters are structurally
+present and correctly capped in every report so far.
 
 ## Bot vs human
 
