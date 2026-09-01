@@ -37,6 +37,8 @@ The kit is the source of truth. Nothing is authored inside the game folder;
                                       on deploy (purple = technician)
   python dimod.py rescue [player]     teleport a player who fell out of the
                                       world back onto solid ground
+  python dimod.py score-report        ask DIScore for a mid-match MP report
+  python dimod.py score-log [n]       tail the MP scoring report
 """
 import json, os, shutil, subprocess, sys, time
 
@@ -334,7 +336,8 @@ def cmd_apply(name):
                       "DIExtraction.recon",
                       "DIExtraction.loadout",
                       "DIExtraction.disguise",
-                      "DIExtraction.rescue"):
+                      "DIExtraction.rescue",
+                      "DIScore.report"):
         transient_path = os.path.join(WIN64, transient)
         if os.path.isfile(transient_path):
             os.remove(transient_path)
@@ -828,6 +831,39 @@ def cmd_rescue(target=None):
         print(c("r", "  refused: a rescue is already pending"))
         return 1
     print(c("y", f"  rescue requested on pid {pid}"))
+def cmd_score_report():
+    """Ask DIScore for an immediate mid-match report instead of waiting for
+    MatchResultsPosted. The mod polls for the marker every 2s."""
+    if load_state().get("profile") != "scoring":
+        print(c("r", "  refused: the scoring profile is not active"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DIScore.report")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write("REPORT\n")
+    except FileExistsError:
+        print(c("r", "  refused: a report request is already pending"))
+        return 1
+    print(c("y", f"  scoring report requested on pid {pid}"))
+    print(c("d", "  read it with:  python dimod.py score-log"))
+    return 0
+
+
+def cmd_score_log(n=120):
+    """Tail DIScore.log. Separate from `logs` because the scoring output is the
+    deliverable, not UE4SS diagnostics."""
+    path = os.path.join(WIN64, "DIScore.log")
+    if not os.path.isfile(path):
+        print(c("r", "  no DIScore.log yet (has the scoring profile run a match?)"))
+        return 1
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+    for line in lines[-int(n):]:
+        print("  " + line.rstrip())
     return 0
 
 
@@ -872,6 +908,9 @@ def main():
                             a[2] if len(a) > 2 else None)
     if cmd == "rescue":
         return cmd_rescue(a[1] if len(a) > 1 else None)
+    if cmd == "score-report": return cmd_score_report()
+    if cmd == "score-log":
+        return cmd_score_log(a[1] if len(a) > 1 else 120)
     print(c("r", f"  unknown command: {cmd}"))
     print(__doc__)
     return 1
