@@ -399,6 +399,26 @@ partial rotation would shift every later map and quietly corrupt the mapping.
 Failure is never fatal to the launch, only loud: the server starts with its old
 rotation and says so.
 
+### Signed off, not open questions
+
+Four things carried "unverified" markers for a while. The operator closed all
+four on **2026-09-02**; they are recorded here so they are not re-raised as
+bugs.
+
+| Item | Decision |
+|---|---|
+| `Timeout` = 7 MP for `EMatchResult` 4 | Correct as implemented. |
+| `EMatchResult` 3 (`MissionFailed_NoAgentsLeft`) has no site field | Accepted. A winner under it scores no win bonus. The log still says `NOT SCORED`, deliberately - an unscored win should be visible, not silent. |
+| The seven `mapId` values in `scrims-maps.json` | All confirmed correct. They were screenshot transcriptions; five have since been exercised live. |
+| `PickMap` returns `(counter + 1) % N` | Holding on every launch since the shift went in. Inferred from the log, not read from the binary. |
+
+And one thing that is deliberately **not** reconciled: the site's own
+`isMapWinner` disagrees with the game's `bWon` whenever a bot wins - it read
+`true` for the sole human on all six maps of a scrim where bots took three of
+them. `isMapWinner` and `calculatedPlacementPoints` are computed site-side from
+data DIScore never sends, so this is a question about the site's scoring, not
+about this pipeline. Out of scope by decision.
+
 ### Identity
 
 The site is Discord-identified: `playerScores` entries take a `discordId` or its

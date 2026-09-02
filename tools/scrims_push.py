@@ -258,6 +258,10 @@ def shift_for_server(rotation):
     starting at 0 - so the FIRST map actually played is rotation[1], and
     rotation[0] is skipped until the list wraps.
 
+    Confirmed live 2026-09-02: with the shift in place a six-map lineup served
+    its maps in lineup order. The rule is inferred from the log rather than read
+    out of the binary, but it has held for every launch since.
+
     A one-entry rotation hid this for a long time: 1 % 1 == 0, so it served the
     right map and looked like proof that rotations start at index 0.
 

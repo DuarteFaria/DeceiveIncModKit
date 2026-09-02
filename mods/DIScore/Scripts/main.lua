@@ -87,8 +87,14 @@ local MP = {
 local WIN_FIELDS = {
     [1] = { field = "Win",     mp = 7 },  -- MissionSucess_ObjectiveExtracted
     [2] = { field = "LMS",     mp = 5 },  -- MissionSucess_LastManStanding
-    [4] = { field = "Timeout", mp = 7 },  -- MissionFailed_TimeOut  (ASSUMED)
+    [4] = { field = "Timeout", mp = 7 },  -- MissionFailed_TimeOut
 }
+
+-- EMatchResult 3 (MissionFailed_NoAgentsLeft) has no field on the site, so a
+-- winner under it scores no win bonus. Both that and Timeout=7 were signed off
+-- as-is by the operator on 2026-09-02 - they are deliberate, not open
+-- questions. The log still says NOT SCORED when it happens, because an
+-- unscored win should be visible rather than silent.
 
 -- Every DIXPEvent, so unmapped fires are still legible in the log rather than
 -- showing up as a bare integer.
@@ -514,6 +520,9 @@ local function score_from_counts(counts, won, match_result)
         if w ~= nil then
             add(w.field, "MatchWin(result=" .. tostring(match_result) .. ")", -1, 1, 1, w.mp)
         else
+            -- Accepted outcome, not a defect: EMatchResult 3 has no site
+            -- field. Logged loudly all the same so a zero is never mistaken
+            -- for "did not win".
             lines[#lines + 1] = string.format(
                 "      %-14s won=true but no win field for MatchResult=%s - NOT SCORED",
                 "(none)", tostring(match_result))

@@ -20,10 +20,11 @@
     "the level name - so the older file-name keys still work for a report",
     "produced before the short name existed.",
     "",
-    "UNVERIFIED: mapId values were transcribed from a screenshot of the site's",
-    "table - 32-character random strings, so one misread character silently",
-    "targets the wrong map. Only Fragrant Shore (Day) and Sound Eclipse have",
-    "been exercised against the live API so far."
+    "The mapId values were originally transcribed from a screenshot of the",
+    "site's table - 32-character random strings, where one misread character",
+    "would silently target the wrong map. The operator confirmed all seven as",
+    "correct on 2026-09-02, and five have since been exercised against the live",
+    "API. Treat them as verified."
   ],
 
   "maps": {
@@ -91,7 +92,7 @@
     "ds": {
       "mapId": "jx78v03gsn9t9hjyt49k7v1yk57gz0qa",
       "name": "Diamond Spire",
-      "note": "mapCode is safe here - Diamond Spire has no Day/Night variant. UNVERIFIED: code guessed from the sr/se/fs pattern, not yet observed live"
+      "note": "mapCode is safe here - Diamond Spire has no Day/Night variant. The code itself was inferred from the sr/se/fs pattern rather than observed; it is only a fallback for reports predating map_short_name, so a wrong guess costs a refusal, not a mis-file"
     }
   }
 }
