@@ -148,6 +148,14 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
   bootstrapper entirely, so no anti-cheat is involved.
 - **Steam updates** overwrite the game folder. After one, re-run
   `dimod.py apply <profile>`. UE4SS itself may need reinstalling.
+- **The game's own binaries are not in this repo.** Neither the server
+  executable nor `ue4ss.dll` is committed - they are not ours to redistribute -
+  so `baseline/` holds only text on a fresh clone. Nothing in the kit reads
+  them; they were a manual rollback net for a binary patch that never happened
+  (the Solo-12 patch only ever touched memory), and Steam's *verify integrity
+  of game files* restores the executable anyway. Bring your own copies in if you
+  want the net, then `python tools/verify_baseline.py` to check them against
+  the committed `manifest.sha256`.
 - Blueprint function calls from Lua can hard-crash the server - `pcall` does
   not catch it. See docs/05.
 - Applying a profile resets manager-owned gameplay keys to their stock baseline
