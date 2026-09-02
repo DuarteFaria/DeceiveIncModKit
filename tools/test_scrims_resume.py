@@ -56,8 +56,21 @@ def stub(scored, lineup=LINEUP):
     sp.api = fake_api
 
 
-def rot(scored_keys, full=False):
+def written(scored_keys, full=False):
+    """The raw MapRotation list, in the order it is written to the INI."""
     return sp.fetch_rotation("https://x", "L", "k", skip_played=not full)[0]
+
+
+def rot(scored_keys, full=False):
+    """The order the server actually PLAYS, which is what the tests care about.
+
+    PickMap returns (counter + 1) % N with the counter starting at 0, so entry
+    0 is played last, on the wrap. Deriving the played order here means the
+    expectations below read as lineup order and a regression in the shift shows
+    up as a wrong ORDER rather than a puzzling off-by-one."""
+    w = written(scored_keys, full=full)
+    n = len(w)
+    return [w[(i + 1) % n] for i in range(n)] if n else []
 
 
 # --------------------------------------------- rotation resumes correctly
@@ -117,7 +130,9 @@ DUPES = [("ds", "Diamond Spire"), ("se", "Sound Eclipse"),
 
 def drot(scored, full=False):
     stub(scored, lineup=DUPES)
-    return sp.fetch_rotation("https://x", "L", "k", skip_played=not full)[0]
+    w = sp.fetch_rotation("https://x", "L", "k", skip_played=not full)[0]
+    n = len(w)
+    return [w[(i + 1) % n] for i in range(n)] if n else []
 
 
 expect("dupes, fresh: both Diamond Spires present", drot([]),
@@ -161,6 +176,8 @@ expect("dupes: a non-duplicated map is unaffected",
 stub([0, 1, 2, 3, 4, 5], lineup=DUPES)
 rotation, notes = sp.fetch_rotation("https://x", "L", "k")
 expect("finished lineup: rotation is empty", rotation, [])
+expect("finished lineup: the shift does not invent an entry",
+       sp.shift_for_server(rotation), [])
 expect("finished lineup: says so in the notes",
        any("already scored" in n and "nothing left" in n for n in notes), True)
 
@@ -183,6 +200,34 @@ expect("both Diamond Spire slots scored: occupied",
 stub([], lineup=DUPES)
 expect("fresh lineup: nothing is occupied",
        sp.resolve_map_index("https://x", "L", "k", ID["ds"])[2], False)
+
+
+# ------------------------------- the server never plays rotation entry 0
+# PickMap logs `Index:1` for a six-entry rotation and `Index:0` for a
+# one-entry one - (counter + 1) % N, counter starting at 0 each process. So
+# the list is written rotated right by one, and a single-entry rotation is
+# left alone because 1 % 1 == 0 already.
+expect("shift: one entry is untouched", sp.shift_for_server(["A"]), ["A"])
+expect("shift: two entries swap", sp.shift_for_server(["A", "B"]), ["B", "A"])
+expect("shift: last entry moves to the front",
+       sp.shift_for_server(["A", "B", "C", "D"]), ["D", "A", "B", "C"])
+expect("shift: empty stays empty", sp.shift_for_server([]), [])
+expect("shift: does not mutate its argument",
+       (lambda L: (sp.shift_for_server(L), L)[1])(["A", "B", "C"]),
+       ["A", "B", "C"])
+
+# The property that matters: whatever the lineup, the played order equals it.
+for _lineup in (["A"], ["A", "B"], ["A", "B", "C"],
+                ["A", "B", "C", "D", "E", "F"], ["A", "B", "A"]):
+    _w = sp.shift_for_server(_lineup)
+    _played = [_w[(i + 1) % len(_w)] for i in range(len(_w))]
+    expect(f"shift: {len(_lineup)} map(s) play in lineup order", _played, _lineup)
+
+# And the INI order really is shifted, not merely reordered by luck.
+stub([])
+expect("written INI order is shifted right by one", written([]),
+       ["Diamondspire", "FragrantShore", "Silverreef",
+        "FragrantShore_Night", "Hardsell_Day"])
 
 print()
 if fails:

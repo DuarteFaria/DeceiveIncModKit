@@ -251,14 +251,27 @@ local AGENT_CANON = {
     chavez = "Chavez",
     hans = "Hans",
     larcin = "Larcin",
-    madamexiu = "Madame Xiu",
+    madamexiu = "Madame Xiu", xiu = "Madame Xiu",
     octo = "Octo",
-    red = "Red",
+    red = "Red", socialite = "Red",
     sasori = "Sasori",
-    squire = "Squire",
+    squire = "Squire", squireseason4 = "Squire",
     vigil = "Vigil",
     yumi = "Yu-Mi",
 }
+
+-- The internal codename is NOT the display name, and two of them differ enough
+-- that the site name cannot be guessed from the asset. Confirmed 2026-09-02
+-- from DIScore.catalogue.txt (13 DA_AgentData_* assets) and from the log, which
+-- had been recording the failures all along:
+--
+--   agent = nil  raw=Socialite     -> Red
+--   agent = nil  raw=Xiu           -> Madame Xiu
+--
+-- Both pushed with no agent field for six matches before this was caught.
+-- SquireSeason4 is an alternate Squire asset and folds onto the same agent.
+-- AgentBalancingName was no help: it read back nil for all 13, same as every
+-- other FText on a dedicated server.
 
 local function fold_agent(name)
     if name == nil then return nil end
@@ -850,9 +863,22 @@ end
 -- resolution. Defer all of that to the report path, which runs from LoopAsync
 -- outside any game hook.
 
--- Mint a fresh match id so a second match in the same server process does not
--- reuse the first one's. Deliberately the ONLY hook left, and its callback
--- touches no UObject at all - it assigns two locals and appends a line.
+-- Mints the first match id of the process. Deliberately the ONLY hook left,
+-- and its callback touches no UObject at all - it assigns two locals and
+-- appends a line.
+--
+-- NOT sufficient on its own, which cost a scrim map on 2026-09-02. This hook
+-- was added precisely to stop a second match in one process reusing the first
+-- match's id, and it does not fire again after a ProcessServerTravel:
+-- match_seq stayed at 1 across two matches, both reports carried
+-- match_id=20260902T171326Z-1-1788369206, and the pusher skipped the second as
+-- "already pushed". The phase watcher above now mints on the result-screen ->
+-- in-play transition, which does happen every match; this hook only covers the
+-- very first one.
+--
+-- It stayed hidden until the map rotation started working. Before that every
+-- map needed a server restart, so every match got a fresh process and a fresh
+-- id by accident.
 register("/Script/Engine.GameModeBase:StartPlay", function()
     local id = new_match_id()
     append("")
@@ -894,6 +920,22 @@ LoopAsync(2000, function()
         local phase = to_number(gs.GamePhase)
         if phase == nil then return end
         if phase < RESULT_SCREEN then
+            if reported_phase ~= nil then
+                -- We were on the result screen and the phase has moved on, so
+                -- a NEW match is starting inside this same server process.
+                -- Minting here rather than only at StartPlay is what keeps two
+                -- matches in one process from sharing a match_id.
+                --
+                -- Deliberately on the TRANSITION, not on every tick where
+                -- phase < 7: the id has to stay stable for the whole match, or
+                -- a mid-match snapshot would carry a different id each poll
+                -- and the pusher would treat each one as a new match.
+                local id = new_match_id()
+                append("")
+                append("==== new match in this process (phase " ..
+                       tostring(reported_phase) .. " -> " .. tostring(phase) ..
+                       "), match_id=" .. tostring(id) .. " ====")
+            end
             reported_phase = nil          -- re-arm for the next match
         elseif reported_phase == nil then
             reported_phase = phase
@@ -907,4 +949,4 @@ end)
 
 append("")
 append("======== DIScore loaded ========")
-print("[DIScore] loaded - hooking HandleXPEvent; auto-report at match end\n")
+print("[DIScore] loaded - polling XpData; auto-report at match end\n")

@@ -248,6 +248,36 @@ def scored_positions(base, lobby, key):
     return {r["mapIndex"] for r in rows if isinstance(r.get("mapIndex"), int)}
 
 
+def shift_for_server(rotation):
+    """Rotate right by one, because the server never plays entry 0.
+
+    Observed on every round-robin launch: the server boots onto
+    LVL_StartupServer (a stub, not a rotation map), then HealthCheckLoadMap
+    calls PickMap, which logs `Index:1` for a six-entry rotation and `Index:0`
+    for a one-entry rotation. That is `(counter + 1) % N` with the counter
+    starting at 0 - so the FIRST map actually played is rotation[1], and
+    rotation[0] is skipped until the list wraps.
+
+    A one-entry rotation hid this for a long time: 1 % 1 == 0, so it served the
+    right map and looked like proof that rotations start at index 0.
+
+    Rotating right by one puts lineup[0] at rotation[1], and the wrap lands the
+    displaced last map at index 0 exactly when its turn comes:
+
+        lineup   L0 L1 L2 L3 L4 L5
+        written  L5 L0 L1 L2 L3 L4
+        played       L0 L1 L2 L3 L4  then 6%6=0 -> L5
+
+    Correct for every length, including 1, where it is a no-op.
+
+    The counter resets each process, so this composes with resuming: after a
+    restart the first playable map is again rotation[1], which is the first
+    unscored map."""
+    if len(rotation) < 2:
+        return list(rotation)
+    return [rotation[-1]] + list(rotation[:-1])
+
+
 def fetch_rotation(base, lobby, key, skip_played=True):
     """-> (list of short names, notes).
 
@@ -291,7 +321,13 @@ def fetch_rotation(base, lobby, key, skip_played=True):
     if not rotation and maps:
         notes.append("every lineup map is already scored - nothing left to play")
 
-    return rotation, notes
+    shifted = shift_for_server(rotation)
+    if len(shifted) > 1:
+        notes.append(f"shifted right by one so the server's first pick "
+                     f"(index 1) is {rotation[0]!r}; {shifted[0]!r} sits at "
+                     f"index 0 and plays last, on the wrap")
+
+    return shifted, notes
 
 
 def resolve_map_index(base, lobby, key, map_id):
