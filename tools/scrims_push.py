@@ -548,6 +548,27 @@ def push_once(a, key, report):
         return False
 
 
+def env_lobby():
+    """SCRIMS_LOBBY_ID as the .env file says RIGHT NOW, or None.
+
+    Read fresh from disk rather than from os.environ: the watcher is a
+    long-lived process and os.environ froze at startup, which is the whole
+    problem this exists to catch."""
+    path = os.path.join(KIT, ".env")
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                if k.strip() == "SCRIMS_LOBBY_ID":
+                    return v.strip().strip('"').strip("'") or None
+    except OSError:
+        pass
+    return None
+
+
 def watch(a, key):
     """Poll the report and push each new final match. The hands-off mode: start
     the server, play, and scores appear on the site."""
@@ -559,6 +580,13 @@ def watch(a, key):
     pushed = load_pushed()
     if pushed:
         print(c("d", f"  {len(pushed)} match(es) already pushed previously\n"))
+
+    # The lobby this watcher will push to, frozen at startup by argparse. If
+    # .env changes underneath a running watcher - which is exactly what
+    # starting a new scrim looks like - every score would go to the OLD lobby,
+    # silently and irreversibly. Compared against the file on every tick.
+    started_with = env_lobby()
+    warned_lobby = False
 
     last_seen = None
     while True:
@@ -572,6 +600,23 @@ def watch(a, key):
             # try again on the next tick.
             print(c("d", f"  report unreadable ({type(e).__name__}), retrying"))
             report = None
+
+        # Checked before anything is pushed, not after.
+        current = env_lobby()
+        if current is not None and started_with is not None and current != started_with:
+            if not warned_lobby:
+                warned_lobby = True
+                print(c("r", "\n  STOPPED: SCRIMS_LOBBY_ID changed under a "
+                             "running watcher."))
+                print(c("d", f"    started with {started_with}\n"
+                             f"    .env now says {current}\n"
+                             "    This watcher would push to the lobby it "
+                             "started with, so it is\n"
+                             "    pushing nothing. Restart it:  python "
+                             "dimod.py restart <profile>\n"))
+            # Non-zero: the watcher stopped without doing its job, so a
+            # supervisor sees a failure rather than a clean exit.
+            return 1
 
         if report is not None:
             mid = report.get("match_id")

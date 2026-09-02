@@ -580,6 +580,49 @@ def sync_scrims_rotation():
     return True
 
 
+def pid_alive(pid):
+    """Is this pid a live process? ctypes rather than tasklist, to match
+    server_pid() - no subprocess churn for something the GUI may poll."""
+    import ctypes
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        h = k32.OpenProcess(0x0400, False, int(pid))   # QUERY_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            # An exited process still opens until its handles close, so check
+            # the exit code: 259 is STILL_ACTIVE.
+            if k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                return code.value == 259
+            return True
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return False
+
+
+def watcher_pid():
+    """-> the live watcher's pid, or None.
+
+    A stale pidfile is cleared as a side effect. It happens routinely: the
+    watcher owns its own console, so closing that window kills it without
+    stop_scrims_watcher ever running."""
+    try:
+        with open(WATCHER_PID, encoding="ascii") as f:
+            pid = int(f.read().strip())
+    except Exception:
+        return None
+    if pid_alive(pid):
+        return pid
+    try:
+        os.remove(WATCHER_PID)
+        print(c("d", f"  cleared stale watcher pidfile (pid {pid} is gone)"))
+    except OSError:
+        pass
+    return None
+
+
 def start_scrims_watcher():
     """Spawn the scrims pusher in --watch mode for profiles that ask for it.
 
@@ -599,11 +642,20 @@ def start_scrims_watcher():
         print(c("r", "  scrims watcher not started: tools/scrims_push.py missing"))
         return
 
-    exe = sys.executable
-    if os.path.basename(exe).lower() == "pythonw.exe":
-        cand = os.path.join(os.path.dirname(exe), "python.exe")
-        if os.path.isfile(cand):
-            exe = cand
+    # Refuse rather than spawn a second one. Two watchers both push, and only
+    # the newest is in the pidfile - so `stop` would leave the other running,
+    # pushing with whatever lobby id it started with. `restart` is unaffected
+    # because it stops first.
+    running = watcher_pid()
+    if running:
+        print(c("y", f"  scrims watcher already running (pid {running}) - "
+                     f"not starting a second one"))
+        print(c("d", "    two watchers would both push, and stop only tracks "
+                     "the newest.\n"
+                     "    Use `dimod.py restart <profile>`, or `stop` first."))
+        return
+
+    exe = python_exe()
 
     # Its own console window: the whole point is that pushes are visible
     # without the user going looking for a log.
