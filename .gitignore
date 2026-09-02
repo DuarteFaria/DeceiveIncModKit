@@ -23,6 +23,9 @@ __pycache__/
 # baseline/native-runtime/*/manifest.sha256, which IS tracked), so nothing is
 # lost by keeping them out of the repo - and Steam's "verify integrity of game
 # files" restores the exe anyway. Keep them on disk; do not commit them.
+# (baseline/*.exe.stock was deleted outright on 2026-09-02 - it duplicated
+#  the native-runtime archive byte for byte. The pattern stays so a stray
+#  copy is never committed again.)
 baseline/*.exe.stock
 baseline/native-runtime/**/*.exe.archive
 baseline/native-runtime/**/ue4ss.dll
