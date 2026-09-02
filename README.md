@@ -33,7 +33,7 @@ cd C:\Users\Duarte\DeceiveIncModKit
 
 python dimod.py status                    # what's deployed and running
 python dimod.py list                      # available mods and profiles
-python dimod.py restart tutorial-explore  # stop, apply, launch, inject
+python dimod.py restart scoring           # stop, apply, launch, inject
 python dimod.py logs 40                   # tail the UE4SS log
 python dimod.py apply vanilla             # back to stock gameplay
 ```
@@ -49,6 +49,7 @@ python dimod.py apply vanilla             # back to stock gameplay
 |---|---|
 | `extraction` | The carrier-extraction game mode. See [docs/12](docs/12-extraction-mode.md). |
 | `native-spectator-stage2` | Death-spectator + freecam. Join as a normal player, deploy, die; then `trigger-stage2` for freecam. |
+| `scoring` | Per-player ranked MP scoring. See [docs/13](docs/13-ranked-scoring.md). |
 | `vanilla` | Stock gameplay. Mods off, normal map rotation, public. |
 
 The research and probe profiles from the discovery phase were removed in the
@@ -117,6 +118,7 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
 | `DIExtraction` | The carrier-extraction mode: phase advance, loadout, disguise, teleport. |
 | `DINativeStage2` | Drives the death-spectator freecam route. |
 | `DINativeLifecycle` | Read-only lifecycle observer; part of the verified spectator profile. |
+| `DIScore` | Read-only ranked MP scoring from the game's own XP event counters. |
 
 ---
 

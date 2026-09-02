@@ -40,7 +40,7 @@ The kit is the source of truth. Nothing is authored inside the game folder;
   python dimod.py score-report        ask DIScore for a mid-match MP report
   python dimod.py score-log [n]       tail the MP scoring report
 """
-import json, os, shutil, subprocess, sys, time
+import glob, json, os, shutil, subprocess, sys, time
 
 KIT = os.path.dirname(os.path.abspath(__file__))
 SERVER = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server"
@@ -407,11 +407,16 @@ def cmd_vanilla(remove_ue4ss=False):
     if os.path.isfile(DICONFIG):
         os.remove(DICONFIG)
         print("    removed DIConfig.ini")
-    for f in ("DIProbe_dump.txt", "DITut_dump.txt"):
-        p = os.path.join(WIN64, f)
-        if os.path.isfile(p):
+    # Mod output. Globbed rather than listed by name: the previous hard-coded
+    # pair named two mods that no longer exist while leaving every current
+    # mod's log behind, and orphaned dumps from removed mods accumulated in the
+    # game folder. Patterns cover both without needing an edit per mod.
+    # DI*.log already covers DINativeSpectator-*.log; overlapping patterns would
+    # os.remove an already-removed path and take vanilla down with it.
+    for pattern in ("DI*_dump.txt", "DI*.log"):
+        for p in sorted(glob.glob(os.path.join(WIN64, pattern))):
             os.remove(p)
-            print(f"    removed {f}")
+            print(f"    removed {os.path.basename(p)}")
 
     orig = os.path.join(BASELINE, "TripwireServer.ini.original")
     if os.path.isfile(orig):
@@ -542,8 +547,8 @@ def cmd_logs(n=40):
 
 
 def cmd_trigger_stage1():
-    if load_state().get("profile") != "native-spectator-stage1":
-        print(c("r", "  refused: native-spectator-stage1 is not active"))
+    if load_state().get("profile") != "native-spectator-stage2":
+        print(c("r", "  refused: native-spectator-stage2 is not active"))
         return 1
     pid = server_pid()
     if not pid:
