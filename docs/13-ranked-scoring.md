@@ -20,23 +20,66 @@ maintains and multiplying.
 
 ## The mapping
 
-| Mission Report row | `DIXPEvent` | MP | Cap |
-|---|---|---|---|
-| ELIMINATIONS | `Kill` = 2 | +2 each | — |
-| VAULT ENTERED | `EnterVault` = 18 | +1 | once |
-| FIRST PACKAGE CAPTURE | `FirstObjectivePickup` = 19 | +4 | once |
-| PACKAGE | `PickupObjective` = 20 | +1 | once |
-| *(vault terminals)* | `VaultComputer` = 22 | +2 each | — |
-| *(retinal scanner)* | `ReticalScanner` = 38 | +4 each | — |
-| — | `ADIPlayerState.bWon` | +7 | once |
+The site's score fields and the game's `DIXPEvent` counters line up one-to-one.
+`field` is the exact key the API expects; `mods/DIScore/Scripts/main.lua` holds
+this as a single table so the two vocabularies meet in exactly one place.
 
-`ReticalScanner` is the studio's own spelling. Intel, `Extract`,
-`MatchPlayed`, the `Kill_10`/`Kill_20`/… milestones and every multiplier row
-are logged but score nothing.
+| Site field | Type | MP | `DIXPEvent` | Cap |
+|---|---|---|---|---|
+| `Elims` | number | 2 each | `Kill` = 2 | — |
+| `Terms` | number | 2 each | `VaultComputer` = 22 | — |
+| `Ret Scanner` | checkbox | 4 | `ReticalScanner` = 38 | **once** |
+| `Enter vault ` | checkbox | 1 | `EnterVault` = 18 | once |
+| `Podium` | checkbox | 4 | `FirstObjectivePickup` = 19 | once |
+| `Package Hold` | checkbox | 1 | `PickupObjective` = 20 | once |
+| `Win` | checkbox | 7 | `bWon` + `EMatchResult` = 1 | once |
+| `LMS` | checkbox | 5 | `bWon` + `EMatchResult` = 2 | once |
+| `Timeout` | checkbox | 7 | `bWon` + `EMatchResult` = 4 | once |
 
-Win is not an XP event — it is the replicated `bWon` bool on the player state,
-corroborated by `EMatchResult` on the game state
-(`MissionSucess_ObjectiveExtracted` = 1, `MissionSucess_LastManStanding` = 2).
+`ReticalScanner` is the studio's own spelling. `Enter vault ` keeps its trailing
+space because the site's field list has one - kept byte-exact deliberately, so
+that if it is a typo it gets fixed on their side rather than silently diverging
+here.
+
+Two consequences worth stating plainly, because both differ from the first cut
+of this mod:
+
+**`Ret Scanner` is a checkbox, so it scores once.** The game disagrees - its
+`MaxTrigger` is `INT_MAX`, meaning repeat scans are possible - so DIScore clamps
+to 1 and the log prints `(capped from N)` if it ever fires twice. This is the one
+place where the site's rules are stricter than the game's counters.
+
+**The win bonus is three mutually exclusive fields, not a flat +7.** `bWon`
+alone is not enough; `EMatchResult` selects which field applies. A last-man-
+standing win is `LMS` = **5**, not `Win` = 7. `EMatchResult` = 3
+(`MissionFailed_NoAgentsLeft`) has no corresponding field, so a winner under it
+is reported and *not* scored rather than silently zeroed.
+
+Unscored events (`Intel`, `Extract`, `MatchPlayed`, `DoorUnlock`, the `Kill_N`
+milestones, every multiplier) are still sent under `events` so the site can
+display detail the MP table ignores.
+
+### Agents
+
+The site accepts exactly twelve agent names in a fixed spelling. The game gives
+two different forms - asset/class names (`Cavaliere`, `MadameXiu`, `YuMi`) and
+bot display names (`Cavalière`, `Madame Xiu`) - so DIScore folds both
+(lowercase, drop every non-alphanumeric ASCII byte) and looks the result up in a
+table keyed by both folded spellings. Accented characters fold to *different*
+keys than their unaccented equivalents (`Cavalière` → `cavalire`,
+`Cavaliere` → `cavaliere`), so both are listed rather than transliterated.
+
+An unrecognised value resolves to `null` and is logged as `UNRECOGNISED`, so a
+wrong agent is never pushed to the API.
+
+### Maps
+
+The site distinguishes Day and Night variants of Hard Sell and Fragrant Shore,
+which a `LVL_` level name alone may not. So the map is not derived from the level
+name: `UMapData` carries the authoritative `MapDisplayName`, `mapCode` and
+`MapFileName`, reachable via `ADeceiveIncGameStateBase::GetCurrentMapData()`.
+All three go into the payload; which one matches the site's `mapId` is settled
+by the first live report.
 
 ## Verified live, 2026-09-01
 
@@ -101,9 +144,14 @@ Stage 3 native invoker, not Lua hooks. Since the XP gate is open, that is moot.
   `false/…/NetConnection=false`. With the `IsValid()` check in place
   NetConnection is now accurate too, and all three signals agree — no
   `DISAGREE` lines.
-- **The +7 win rule works.** Bot "Hans" had `bWon=true` and scored
-  `Kill x3 @2 = 6` + `MatchWin x1 @7 = 7` = **13 MP**. Three other bots scored
-  2 MP each on one kill; the human scored 0.
+- **The win rule works.** Bot "Hans" had `bWon=true` and scored
+  `Kill x3 @2 = 6` plus the win bonus. Three other bots scored 2 MP each on one
+  kill; the human scored 0.
+
+  **Re-scored under the site's real field list, Hans is 11 MP, not 13.** This
+  match ended `MissionSucess_LastManStanding`, which is `LMS` = 5, not `Win` = 7.
+  The 13 came from an earlier flat +7 for any win, before the three-way win
+  split was known. `tools/test_discore_scoring.py` pins this exact case.
 
 `DIVERGE` reporting is now gated behind `hook_fires > 0`, so a permanently dead
 hook stops printing `poll=N hook=0` against every scored event.
@@ -185,7 +233,15 @@ only what scored. `raw_count` versus `counted` exposes any cap that was applied 
 they differ only if a `MaxTrigger` ever disagrees with our table, which has not
 happened yet.
 
-### Identity: the part that needs deciding
+### Identity
+
+The site is Discord-identified: `playerScores` entries take a `discordId` or its
+own `playerId`, neither of which the game server knows anything about. The
+resolution route chosen is to **fetch the lobby's participants from the API** and
+match them to in-game players, so the mapping is never maintained by hand here.
+
+That makes the fields below the *local* half of the join - what DIScore can offer
+the matcher - rather than a key the site would accept directly.
 
 `name` is **not** a usable key. It is not unique (one lobby held three "Hans",
 another two "Ace" - the bots reuse agent names), not stable across matches, and

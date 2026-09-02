@@ -45,19 +45,39 @@ local JSON_OUT = "DIScore.report.json"
 
 -- ---------------------------------------------------------------- scoring
 
--- DIXPEvent -> match points. Values from the ranked spec; events absent from
--- this table (Intel, Extract, MatchPlayed, the multipliers, the Kill_N
--- milestones) score nothing and are logged but not counted.
+-- DIXPEvent -> the scrims site's own score fields. `field` is the exact key the
+-- API expects, so this table is the single place the two vocabularies meet.
+--
+-- `cap` follows the site's field TYPE, not the game's MaxTrigger: a "number"
+-- field scores per occurrence, a "checkbox" scores once. Those agree with the
+-- game everywhere except Ret Scanner, where the game allows repeats (MaxTrigger
+-- = INT_MAX) but the site's checkbox does not - so we clamp to 1 and the log
+-- shows "(capped from N)" if it ever happens.
+--
+-- Events absent from this table (Intel, Extract, MatchPlayed, DoorUnlock, the
+-- multipliers, the Kill_N milestones) score nothing; they are still reported
+-- under `events` so the site can display them.
 local MP = {
-    [2]  = { name = "Kill",                 mp = 2, cap = nil },  -- eliminations
-    [18] = { name = "EnterVault",           mp = 1, cap = 1   },  -- enter phase 2 vault
-    [19] = { name = "FirstObjectivePickup", mp = 4, cap = 1   },  -- briefcase grab
-    [20] = { name = "PickupObjective",      mp = 1, cap = 1   },  -- case held
-    [22] = { name = "VaultComputer",        mp = 2, cap = nil },  -- vault terminals
-    [38] = { name = "ReticalScanner",       mp = 4, cap = nil },  -- retinal scanner (their typo)
+    [2]  = { name = "Kill",                 field = "Elims",        mp = 2, cap = nil },  -- number
+    [18] = { name = "EnterVault",           field = "Enter vault ", mp = 1, cap = 1   },  -- checkbox
+    [19] = { name = "FirstObjectivePickup", field = "Podium",       mp = 4, cap = 1   },  -- checkbox
+    [20] = { name = "PickupObjective",      field = "Package Hold", mp = 1, cap = 1   },  -- checkbox
+    [22] = { name = "VaultComputer",        field = "Terms",        mp = 2, cap = nil },  -- number
+    [38] = { name = "ReticalScanner",       field = "Ret Scanner",  mp = 4, cap = 1   },  -- checkbox
 }
 
-local WIN_MP = 7
+-- "Enter vault " carries a trailing space because the site's field list does.
+-- Kept byte-exact deliberately: if that is a typo it must be fixed on their
+-- side first, not silently diverged from here.
+
+-- The win bonus is not one field. The site has three mutually exclusive win
+-- checkboxes and EMatchResult says which applies, so a winner scores exactly
+-- one of these rather than a flat +7.
+local WIN_FIELDS = {
+    [1] = { field = "Win",     mp = 7 },  -- MissionSucess_ObjectiveExtracted
+    [2] = { field = "LMS",     mp = 5 },  -- MissionSucess_LastManStanding
+    [4] = { field = "Timeout", mp = 7 },  -- MissionFailed_TimeOut  (ASSUMED)
+}
 
 -- Every DIXPEvent, so unmapped fires are still legible in the log rather than
 -- showing up as a bare integer.
@@ -206,6 +226,43 @@ local function object_valid(object)
     return false
 end
 
+-- The site accepts exactly these twelve agent names, in this spelling. Keys are
+-- the folded form (lowercased, every non-alphanumeric ASCII byte dropped) so
+-- that both spellings we can encounter resolve to the same entry:
+--   * asset/class names       "Cavaliere"  -> "cavaliere"
+--   * bot display names       "Cavaliere" with an accent -> "cavalire", because
+--     folding drops the multi-byte UTF-8 sequence rather than transliterating it
+-- Both keys are therefore listed. Same story for "Madame Xiu"/"MadameXiu" and
+-- "Yu-Mi"/"YuMi".
+local AGENT_CANON = {
+    ace = "Ace",
+    cavaliere = "Cavalière", cavalire = "Cavalière",
+    chavez = "Chavez",
+    hans = "Hans",
+    larcin = "Larcin",
+    madamexiu = "Madame Xiu",
+    octo = "Octo",
+    red = "Red",
+    sasori = "Sasori",
+    squire = "Squire",
+    vigil = "Vigil",
+    yumi = "Yu-Mi",
+}
+
+local function fold_agent(name)
+    if name == nil then return nil end
+    return (tostring(name):lower():gsub("[^a-z0-9]", ""))
+end
+
+-- Maps whatever the game gave us onto the site's spelling. Returns nil when it
+-- does not match a known agent, so an unrecognised value is reported as such
+-- rather than silently pushed to the API.
+local function canon_agent(name)
+    local folded = fold_agent(name)
+    if folded == nil or folded == "" then return nil end
+    return AGENT_CANON[folded]
+end
+
 -- The scrims API wants the AGENT the player used, which is not the player's
 -- name. For bots the two coincide (a bot is named after its agent - "Hans",
 -- "Cavaliere"), but for a human PlayerDisplayName is the account name and the
@@ -258,7 +315,21 @@ local function agent_of(player_state)
         cleaned = cleaned:gsub("^DA_Agent_", ""):gsub("^Agent_", ""):gsub("^DA_", "")
     end
 
-    return cleaned, table.concat(how, " ")
+    -- The player's own display name is a last resort that happens to be right
+    -- for bots, which are named after their agent.
+    if cleaned == nil then
+        local n = to_string_prop(player_state.PlayerDisplayName)
+        if n ~= nil and canon_agent(n) ~= nil then
+            cleaned = n
+            how[#how + 1] = "DisplayName=" .. tostring(n)
+        end
+    end
+
+    local canon = canon_agent(cleaned)
+    if cleaned ~= nil and canon == nil then
+        how[#how + 1] = "UNRECOGNISED=" .. tostring(cleaned)
+    end
+    return canon, cleaned, table.concat(how, " ")
 end
 
 local function identify(player_state)
@@ -314,7 +385,7 @@ local function identify(player_state)
     -- unstable. PlayerID is per-match only and is recorded for debugging, never
     -- as a key.
     local ident = {}
-    ident.agent, ident.agent_routes = agent_of(player_state)
+    ident.agent, ident.agent_raw, ident.agent_routes = agent_of(player_state)
     pcall(function() ident.bandit_id_crc = to_number(player_state.BanditIDCRC) end)
     pcall(function() ident.platform_type = to_number(player_state.PlatformType) end)
     pcall(function() ident.player_id = to_number(player_state.PlayerID) end)
@@ -391,12 +462,28 @@ end
 
 -- ---------------------------------------------------------------- report
 
-local function score_from_counts(counts, won)
-    local lines, total, breakdown = {}, 0, array()
+-- Returns the log lines, the MP total, the breakdown rows, and `score`: the
+-- field->points object the API's playerScores entry takes verbatim.
+local function score_from_counts(counts, won, match_result)
+    local lines, total, breakdown, score = {}, 0, array(), {}
     -- Stable order: by DIXPEvent ordinal.
     local ids = {}
     for id in pairs(MP) do ids[#ids + 1] = id end
     table.sort(ids)
+
+    local function add(field, event, event_id, raw, counted, mp_each)
+        local points = counted * mp_each
+        total = total + points
+        score[field] = (score[field] or 0) + points
+        breakdown[#breakdown + 1] = {
+            event = event, field = field, event_id = event_id,
+            raw_count = raw, counted = counted, mp_each = mp_each, mp = points,
+        }
+        local note = ""
+        if counted ~= raw then note = string.format("  (capped from %d)", raw) end
+        lines[#lines + 1] = string.format("      %-14s %-22s x%-3d @%d = %3d MP%s",
+                                          field, event, counted, mp_each, points, note)
+    end
 
     for _, id in ipairs(ids) do
         local rule = MP[id]
@@ -404,29 +491,25 @@ local function score_from_counts(counts, won)
         if n > 0 then
             local counted = n
             if rule.cap and counted > rule.cap then counted = rule.cap end
-            local points = counted * rule.mp
-            total = total + points
-            local note = ""
-            if counted ~= n then note = string.format("  (capped from %d)", n) end
-            lines[#lines + 1] = string.format(
-                "      %-22s x%-3d @%d = %3d MP%s", rule.name, counted, rule.mp, points, note)
-            breakdown[#breakdown + 1] = {
-                event = rule.name, event_id = id, raw_count = n,
-                counted = counted, mp_each = rule.mp, mp = points,
-            }
+            add(rule.field, rule.name, id, n, counted, rule.mp)
         end
     end
 
+    -- Exactly one win field, chosen by how the match ended. A winner under an
+    -- EMatchResult we have no field for is reported rather than scored, so a
+    -- silent zero can never be mistaken for "did not win".
     if won then
-        total = total + WIN_MP
-        lines[#lines + 1] = string.format("      %-22s x%-3d @%d = %3d MP", "MatchWin", 1, WIN_MP, WIN_MP)
-        breakdown[#breakdown + 1] = {
-            event = "MatchWin", event_id = -1, raw_count = 1,
-            counted = 1, mp_each = WIN_MP, mp = WIN_MP,
-        }
+        local w = WIN_FIELDS[match_result or -1]
+        if w ~= nil then
+            add(w.field, "MatchWin(result=" .. tostring(match_result) .. ")", -1, 1, 1, w.mp)
+        else
+            lines[#lines + 1] = string.format(
+                "      %-14s won=true but no win field for MatchResult=%s - NOT SCORED",
+                "(none)", tostring(match_result))
+        end
     end
 
-    return lines, total, breakdown
+    return lines, total, breakdown, score
 end
 
 local function game_state()
@@ -482,12 +565,34 @@ local function current_map(gs)
     return (full(gs)):match("/([^/.:]+)%.[^/.:]+:PersistentLevel") or nil
 end
 
+-- The level name alone cannot identify a map to the site: it lists Day and
+-- Night variants of Hard Sell and Fragrant Shore, and both variants plausibly
+-- share one LVL_ name. UMapData carries the authoritative display name, so ask
+-- the game instead of maintaining a translation table.
+local function map_identity(gs)
+    local out = {}
+    if gs == nil then return out end
+    pcall(function()
+        local md = gs:GetCurrentMapData()
+        if not object_valid(md) then return end
+        out.map_display_name = to_string_prop(md.MapDisplayName)
+        out.map_code = to_string_prop(md.mapCode)
+        out.map_file_name = to_string_prop(md.MapFileName)
+        out.map_data_object = full(md)
+    end)
+    return out
+end
+
 -- Echoed into the payload so a stored match record stays interpretable even if
 -- the MP values are retuned later.
 local function mp_table_json()
-    local t = { MatchWin = WIN_MP }
+    local t = {}
     for id, rule in pairs(MP) do
-        t[rule.name] = { event_id = id, mp = rule.mp, cap = rule.cap or false }
+        t[rule.field] = { event = rule.name, event_id = id,
+                          mp = rule.mp, cap = rule.cap or false }
+    end
+    for result, w in pairs(WIN_FIELDS) do
+        t[w.field] = { event = "MatchWin", match_result = result, mp = w.mp, cap = 1 }
     end
     return t
 end
@@ -508,6 +613,15 @@ local function report(reason)
     local gs, gs_class = game_state()
     append("game_state=" .. full(gs) .. " class=" .. tostring(gs_class))
     payload.map = current_map(gs)
+    local mid = map_identity(gs)
+    payload.map_display_name = mid.map_display_name
+    payload.map_code = mid.map_code
+    payload.map_file_name = mid.map_file_name
+    append("map level=" .. tostring(payload.map) ..
+           " display=" .. tostring(mid.map_display_name) ..
+           " code=" .. tostring(mid.map_code) ..
+           " file=" .. tostring(mid.map_file_name) ..
+           " data=" .. tostring(mid.map_data_object))
 
     -- The XP gate. If this is false on a self-hosted server, HandleXPEvent very
     -- likely early-outs and both tallies will be empty - that is the single
@@ -557,6 +671,7 @@ local function report(reason)
                    " platform=" .. tostring(ident.platform_type) ..
                    " hide_name=" .. tostring(ident.hide_player_name))
             append("      agent    = " .. tostring(ident.agent) ..
+                   "  raw=" .. tostring(ident.agent_raw) ..
                    "   routes: " .. tostring(ident.agent_routes))
 
             -- Source A: the server's own counters.
@@ -611,7 +726,8 @@ local function report(reason)
             -- VaultComputer and ReticalScanner are INT_MAX; EnterVault,
             -- FirstObjectivePickup and PickupObjective are 1), so there is no
             -- clamping to work around and nothing to gain from the hook.
-            local lines, total, breakdown = score_from_counts(poll_counts, won == true)
+            local lines, total, breakdown, score =
+                score_from_counts(poll_counts, won == true, payload.match_result)
             append("      -- score (poll) --")
             if #lines == 0 then
                 append("      (nothing scored)")
@@ -628,6 +744,7 @@ local function report(reason)
             payload.players[#payload.players + 1] = {
                 name = name,
                 agent = ident.agent,
+                agent_raw = ident.agent_raw,
                 agent_routes = ident.agent_routes,
                 is_bot = is_bot,
                 bandit_id_crc = ident.bandit_id_crc,
@@ -638,6 +755,7 @@ local function report(reason)
                 won = won == true,
                 events = events,
                 breakdown = breakdown,
+                score = score,
                 mp = total,
             }
         end
