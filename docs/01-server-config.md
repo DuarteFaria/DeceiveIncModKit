@@ -31,7 +31,7 @@ A stock install writes only 8 of these keys. The rest are accepted but absent.
 
 | Key | Notes |
 |---|---|
-| `MapRotation` | Short names, comma-separated. See valid values below. |
+| `MapRotation` | Short names, **one `MapRotation=` line per map** (see below). |
 | `bRandomizeMap` | `True` = random, `False` = round-robin. |
 
 Valid `MapRotation` values — **10** map assets exist, not the 7 that appear in
@@ -46,6 +46,32 @@ Tutorial            TrainingRange       PrivateLobby
 `Tutorial` is confirmed working — see docs/05. An unrecognised entry logs
 `ignoring MapRotation entry '<x>', no playable map matches` and falls back to
 the default pool.
+
+### It is repeated keys, NOT comma-separated
+
+This table said "comma-separated" until 2026-09-02. That was **wrong**, and it
+cost a scrim: the server took the whole string as one entry and fell back to the
+default pool, serving the same map twice.
+
+```
+ignoring MapRotation entry 'Diamondspire,SoundEclipse,FragrantShore_Night,...',
+  no playable map matches MapData:DA_MapData_Diamondspire,SoundEclipse,...
+no MapRotation entry resolves to a playable map, falling back to the default map pool
+```
+
+`UTripwireServerSettings.MapRotation` is a `TArray<FString>`, so it needs one
+line per element, in the order you want them played:
+
+```ini
+MapRotation=Diamondspire
+MapRotation=SoundEclipse
+MapRotation=FragrantShore_Night
+bRandomizeMap=False
+```
+
+The earlier confirmed example (`MapRotation=Tutorial`) was a single entry, which
+is why the mistake went unnoticed — one element parses fine either way.
+`dimod.set_ini_keys` now writes a list value as repeated keys for this reason.
 
 ## Network
 
