@@ -115,6 +115,106 @@ terminal, entered the vault or touched the package. Closing it needs a match
 where those objectives are actually played. The counters are structurally
 present and correctly capped in every report so far.
 
+## Website integration
+
+### Why the mod cannot call the API itself
+
+UE4SS Lua has no HTTP client - only `io`. And it should not have one: the
+dedicated server is crash-sensitive, and blocking the game thread on a network
+round trip during the result screen invites exactly the status-3 exits catalogued
+in `docs/05-findings.md`. `io.popen("curl")` would work mechanically and is a bad
+idea for the same reason.
+
+So the push is split, which is the right shape anyway:
+
+```
+DIScore (Lua)  ->  Win64/DIScore.report.json  ->  pusher (Python)  ->  your API
+```
+
+The mod's only job is to write a complete file. Everything that can fail slowly -
+DNS, TLS, retries, auth - happens in a process the game server does not depend on.
+
+### The payload
+
+`DIScore.report.json` is written at the same moments as the log: on every manual
+`score-report` and once automatically at `GamePhase == 7`. It is rewritten in
+place each time, so a mid-match snapshot is superseded by the final one under the
+same `match_id`.
+
+```jsonc
+{
+  "schema": 1,
+  "match_id": "20260901T193221Z-3-1788371541",  // stable for the whole match
+  "is_final": true,                             // false = provisional snapshot
+  "phase": 7,
+  "map": "LVL_Silverreef",
+  "match_result": 2,
+  "match_result_name": "MissionSucess_LastManStanding",
+  "can_give_xp": true,
+  "reason": "phase=7 (result screen)",
+  "reported_at": "2026-09-01T19:32:21Z",
+  "mp_table": { "Kill": {"event_id": 2, "mp": 2, "cap": false}, "MatchWin": 7 },
+  "players": [
+    {
+      "name": "Hans",
+      "is_bot": true,
+      "bandit_id_crc": 123456,
+      "unique_id": "...",
+      "platform_type": 0,
+      "hide_player_name": 0,
+      "player_id": 4,
+      "won": true,
+      "events": { "Kill": 3, "Intel": 5 },
+      "breakdown": [
+        {"event": "Kill",     "event_id":  2, "raw_count": 3, "counted": 3, "mp_each": 2, "mp": 6},
+        {"event": "MatchWin", "event_id": -1, "raw_count": 1, "counted": 1, "mp_each": 7, "mp": 7}
+      ],
+      "mp": 13
+    }
+  ]
+}
+```
+
+`mp_table` is echoed into every payload deliberately: a stored match record stays
+interpretable after the MP values are retuned, and the site can re-derive totals
+rather than trusting ours.
+
+`events` carries every non-zero counter, including unscored ones like `Intel` and
+`DoorUnlock`, so the site can show detail the MP table ignores. `breakdown` covers
+only what scored. `raw_count` versus `counted` exposes any cap that was applied -
+they differ only if a `MaxTrigger` ever disagrees with our table, which has not
+happened yet.
+
+### Identity: the part that needs deciding
+
+`name` is **not** a usable key. It is not unique (one lobby held three "Hans",
+another two "Ace" - the bots reuse agent names), not stable across matches, and
+`ADIPlayerState.HidePlayerName` lets a player anonymise it.
+
+The payload therefore carries every identity field the player state exposes:
+
+| Field | Type | Verdict |
+|---|---|---|
+| `bandit_id_crc` | `int32` | Candidate primary key - a CRC of the account's Bandit ID, free to read |
+| `unique_id` | string | The true account identity, but it is an `FUniqueNetIdRepl` struct and may not stringify through UE4SS |
+| `platform_type` | enum | PC/Xbox/PS - a disambiguator, not a key |
+| `player_id` | `int32` | Per-match only. **Never** use as a key; present for debugging |
+
+Which of the first two is usable is an open question that one match answers:
+both are now logged on the `identity =` line of every player block, so check
+whether `bandit_id_crc` is non-zero and whether it stays the same for the same
+account across two matches.
+
+### Delivery requirements for the pusher
+
+- **Idempotent.** `match_id` is minted at `StartPlay` and is stable for the match,
+  so a retry cannot double-count. The site should treat `(match_id, player)` as
+  the unique key and let `is_final: true` supersede an earlier snapshot.
+- **Never lose a match.** Queue on disk and retry rather than fire-and-forget; a
+  site outage should not cost a match record.
+- **Secrets out of the repo.** API key via environment variable or a gitignored
+  config - never in `profiles/*.json`, and never in the game folder.
+
 ## Bot vs human
 
 A name check is not enough — the bots use real agent names ("Ace", "Larcin",
@@ -133,8 +233,9 @@ player and flags `DISAGREE` if NetConnection ever contradicts the flags.
 python dimod.py restart scoring
 ```
 
-Play a match. The report writes itself to `Win64/DIScore.log` when the match
-reaches the result screen (`GamePhase == 7`). For a mid-match snapshot:
+Play a match. The report writes itself to `Win64/DIScore.log` - plus the
+machine-readable `Win64/DIScore.report.json` - when the match reaches the result
+screen (`GamePhase == 7`). For a mid-match snapshot:
 
 ```bash
 python dimod.py score-report

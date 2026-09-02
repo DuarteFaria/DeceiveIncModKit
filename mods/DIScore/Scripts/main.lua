@@ -40,6 +40,9 @@ local OUT = "DIScore.log"
 -- rest of the kit uses.
 local TRIGGER = "DIScore.report"
 
+-- Machine-readable twin of the log, consumed by the website pusher.
+local JSON_OUT = "DIScore.report.json"
+
 -- ---------------------------------------------------------------- scoring
 
 -- DIXPEvent -> match points. Values from the ranked spec; events absent from
@@ -96,6 +99,60 @@ local function full(object)
     if pcall(function() rendered = object:ToString() end) and rendered then return rendered end
     return "<unrenderable>"
 end
+
+-- ------------------------------------------------------------------ json
+--
+-- Hand-rolled because UE4SS ships no json library. Only what this payload
+-- needs: string/number/boolean/nil, arrays (marked with __array so an empty one
+-- does not serialise as {}), and string-keyed objects with sorted keys so
+-- successive reports diff cleanly.
+
+local json_encode
+
+local JSON_ESCAPES = {
+    ['"'] = '\\"', ['\\'] = '\\\\', ['\b'] = '\\b', ['\f'] = '\\f',
+    ['\n'] = '\\n', ['\r'] = '\\r', ['\t'] = '\\t',
+}
+
+local function json_string(s)
+    s = tostring(s):gsub('[%c"\\]', function(ch)
+        return JSON_ESCAPES[ch] or string.format('\\u%04x', ch:byte())
+    end)
+    return '"' .. s .. '"'
+end
+
+json_encode = function(value)
+    local t = type(value)
+    if value == nil then return "null" end
+    if t == "boolean" then return tostring(value) end
+    if t == "number" then
+        -- No inf/nan in JSON, and integers must not render as "3.0".
+        if value ~= value or value == math.huge or value == -math.huge then return "null" end
+        if value == math.floor(value) then return string.format("%d", value) end
+        return tostring(value)
+    end
+    if t == "string" then return json_string(value) end
+    if t ~= "table" then return json_string(tostring(value)) end
+
+    if value.__array then
+        local parts = {}
+        for i = 1, #value do parts[#parts + 1] = json_encode(value[i]) end
+        return "[" .. table.concat(parts, ",") .. "]"
+    end
+
+    local keys = {}
+    for k in pairs(value) do
+        if k ~= "__array" then keys[#keys + 1] = tostring(k) end
+    end
+    table.sort(keys)
+    local parts = {}
+    for _, k in ipairs(keys) do
+        parts[#parts + 1] = json_string(k) .. ":" .. json_encode(value[k])
+    end
+    return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function array(t) t = t or {}; t.__array = true; return t end
 
 local function unwrap(value)
     if value == nil then return nil end
@@ -193,7 +250,27 @@ local function identify(player_state)
     end
 
     if is_bot == nil then is_bot = false; evidence[#evidence + 1] = "undetermined" end
-    return name, is_bot, table.concat(evidence, ",")
+
+    -- Keys a website can actually use. PlayerDisplayName cannot be one: it is
+    -- not unique (one lobby held three "Hans" and another two "Ace"), not
+    -- stable across matches, and ADIPlayerState.HidePlayerName lets a player
+    -- anonymise it. BanditIDCRC is the candidate primary key - an int32, so
+    -- free to read - with UniqueId as the fallback if it turns out to be 0 or
+    -- unstable. PlayerID is per-match only and is recorded for debugging, never
+    -- as a key.
+    local ident = {}
+    pcall(function() ident.bandit_id_crc = to_number(player_state.BanditIDCRC) end)
+    pcall(function() ident.platform_type = to_number(player_state.PlatformType) end)
+    pcall(function() ident.player_id = to_number(player_state.PlayerID) end)
+    pcall(function() ident.hide_player_name = to_number(player_state.HidePlayerName) end)
+    pcall(function()
+        local uid = player_state.UniqueId
+        local s = to_string_prop(uid)
+        if s == nil and uid ~= nil then pcall(function() s = uid:ToString() end) end
+        if s ~= nil and s ~= "" then ident.unique_id = s end
+    end)
+
+    return name, is_bot, table.concat(evidence, ","), ident
 end
 
 -- ------------------------------------------------------------ hook tally
@@ -259,7 +336,7 @@ end
 -- ---------------------------------------------------------------- report
 
 local function score_from_counts(counts, won)
-    local lines, total = {}, 0
+    local lines, total, breakdown = {}, 0, array()
     -- Stable order: by DIXPEvent ordinal.
     local ids = {}
     for id in pairs(MP) do ids[#ids + 1] = id end
@@ -277,15 +354,23 @@ local function score_from_counts(counts, won)
             if counted ~= n then note = string.format("  (capped from %d)", n) end
             lines[#lines + 1] = string.format(
                 "      %-22s x%-3d @%d = %3d MP%s", rule.name, counted, rule.mp, points, note)
+            breakdown[#breakdown + 1] = {
+                event = rule.name, event_id = id, raw_count = n,
+                counted = counted, mp_each = rule.mp, mp = points,
+            }
         end
     end
 
     if won then
         total = total + WIN_MP
         lines[#lines + 1] = string.format("      %-22s x%-3d @%d = %3d MP", "MatchWin", 1, WIN_MP, WIN_MP)
+        breakdown[#breakdown + 1] = {
+            event = "MatchWin", event_id = -1, raw_count = 1,
+            counted = 1, mp_each = WIN_MP, mp = WIN_MP,
+        }
     end
 
-    return lines, total
+    return lines, total, breakdown
 end
 
 local function game_state()
@@ -305,12 +390,68 @@ local function game_state()
     return nil, nil
 end
 
+-- ------------------------------------------------------- payload helpers
+
+local RESULT_SCREEN = 7   -- ESpyGamePhase
+
+local MATCH_RESULTS = {
+    [0] = "Invalid",
+    [1] = "MissionSucess_ObjectiveExtracted",
+    [2] = "MissionSucess_LastManStanding",
+    [3] = "MissionFailed_NoAgentsLeft",
+    [4] = "MissionFailed_TimeOut",
+}
+
+-- Identifies one match so the receiving site can dedupe retries. Minted at
+-- StartPlay rather than at report time, because a mid-match snapshot and the
+-- final report must carry the SAME id for the final one to supersede it.
+local current_match_id = nil
+local match_seq = 0
+
+local function new_match_id()
+    match_seq = match_seq + 1
+    current_match_id = string.format("%s-%d-%d", os.date("!%Y%m%dT%H%M%SZ"),
+                                     match_seq, os.time())
+    return current_match_id
+end
+
+local function match_id()
+    if current_match_id == nil then return new_match_id() end
+    return current_match_id
+end
+
+local function current_map(gs)
+    if gs == nil then return nil end
+    -- ".../LVL_Silverreef/LVL_Silverreef.LVL_Silverreef:PersistentLevel..."
+    return (full(gs)):match("/([^/.:]+)%.[^/.:]+:PersistentLevel") or nil
+end
+
+-- Echoed into the payload so a stored match record stays interpretable even if
+-- the MP values are retuned later.
+local function mp_table_json()
+    local t = { MatchWin = WIN_MP }
+    for id, rule in pairs(MP) do
+        t[rule.name] = { event_id = id, mp = rule.mp, cap = rule.cap or false }
+    end
+    return t
+end
+
 local function report(reason)
     append("")
     append("################ DIScore report (" .. tostring(reason) .. ") ################")
 
+    local payload = {
+        schema = 1,
+        match_id = match_id(),
+        reason = tostring(reason),
+        reported_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        mp_table = mp_table_json(),
+        players = array(),
+    }
+
     local gs, gs_class = game_state()
     append("game_state=" .. full(gs) .. " class=" .. tostring(gs_class))
+    payload.map = current_map(gs)
 
     -- The XP gate. If this is false on a self-hosted server, HandleXPEvent very
     -- likely early-outs and both tallies will be empty - that is the single
@@ -319,14 +460,19 @@ local function report(reason)
         local can_give, ok
         ok = pcall(function() can_give = gs:CanGiveXpEvent() end)
         append("CanGiveXpEvent() ok=" .. tostring(ok) .. " value=" .. tostring(can_give))
+        if ok then payload.can_give_xp = can_give and true or false end
 
         local phase
         pcall(function() phase = to_number(gs.GamePhase) end)
         append("GamePhase=" .. tostring(phase))
+        payload.phase = phase
+        payload.is_final = (phase ~= nil and phase >= RESULT_SCREEN) or false
 
         local result
         pcall(function() result = to_number(gs.MatchResult) end)
         append("MatchResult=" .. tostring(result))
+        payload.match_result = result
+        payload.match_result_name = MATCH_RESULTS[result or -1]
     end
 
     append("hook fires observed so far: " .. tostring(hook_fires))
@@ -342,7 +488,7 @@ local function report(reason)
         pcall(function() is_class = ps:IsAnyClass() end)
         if not is_class then
             local ps_full = full(ps)
-            local name, is_bot, evidence = identify(ps)
+            local name, is_bot, evidence, ident = identify(ps)
             local won
             pcall(function() won = ps.bWon end)
 
@@ -350,6 +496,10 @@ local function report(reason)
             append(string.format("   [%s] %s", is_bot and "BOT  " or "HUMAN", name))
             append("      object   = " .. ps_full)
             append("      bWon     = " .. tostring(won) .. "   detection: " .. evidence)
+            append("      identity = bandit_id_crc=" .. tostring(ident.bandit_id_crc) ..
+                   " unique_id=" .. tostring(ident.unique_id) ..
+                   " platform=" .. tostring(ident.platform_type) ..
+                   " hide_name=" .. tostring(ident.hide_player_name))
 
             -- Source A: the server's own counters.
             local rows, err = read_xp_events(ps)
@@ -403,7 +553,7 @@ local function report(reason)
             -- VaultComputer and ReticalScanner are INT_MAX; EnterVault,
             -- FirstObjectivePickup and PickupObjective are 1), so there is no
             -- clamping to work around and nothing to gain from the hook.
-            local lines, total = score_from_counts(poll_counts, won == true)
+            local lines, total, breakdown = score_from_counts(poll_counts, won == true)
             append("      -- score (poll) --")
             if #lines == 0 then
                 append("      (nothing scored)")
@@ -411,12 +561,47 @@ local function report(reason)
                 for _, l in ipairs(lines) do append(l) end
             end
             append(string.format("      TOTAL = %d MP", total))
+
+            local events = {}
+            for id, count in pairs(poll_counts) do
+                if count > 0 then events[event_name(id)] = count end
+            end
+
+            payload.players[#payload.players + 1] = {
+                name = name,
+                is_bot = is_bot,
+                bandit_id_crc = ident.bandit_id_crc,
+                unique_id = ident.unique_id,
+                platform_type = ident.platform_type,
+                hide_player_name = ident.hide_player_name,
+                player_id = ident.player_id,
+                won = won == true,
+                events = events,
+                breakdown = breakdown,
+                mp = total,
+            }
         end
     end
 
+    -- Machine-readable sidecar for the website pusher. Written last and only
+    -- once the whole payload is assembled, so a reader never sees a half file.
+    -- Overwritten each report: a mid-match snapshot is provisional and the
+    -- final one (is_final=true) supersedes it under the same match_id.
+    local json_ok, json_err = pcall(function()
+        local fh = io.open(JSON_OUT, "w")
+        if fh == nil then error("cannot open " .. JSON_OUT) end
+        fh:write(json_encode(payload))
+        fh:close()
+    end)
+    append("json sidecar ok=" .. tostring(json_ok) ..
+           " players=" .. tostring(#payload.players) ..
+           " match_id=" .. tostring(payload.match_id) ..
+           " final=" .. tostring(payload.is_final) ..
+           (json_ok and "" or (" error=" .. tostring(json_err))))
+
     append("")
     append("################ END DIScore report ################")
-    print("[DIScore] report written -> " .. OUT .. "\n")
+    print("[DIScore] report written -> " .. OUT .. " (+ " .. JSON_OUT .. ")\n")
 end
 
 -- ---------------------------------------------------------------- hooks
@@ -472,8 +657,9 @@ register("/Script/DeceiveInc.DeceiveIncGameStateBase:HandleVaultTerminalDeactiva
 register("/Script/Engine.GameModeBase:StartPlay", function()
     hook_tally = {}
     hook_fires = 0
+    local id = new_match_id()
     append("")
-    append("==== StartPlay: tally cleared ====")
+    append("==== StartPlay: tally cleared, match_id=" .. tostring(id) .. " ====")
 end)
 
 -- ------------------------------------------------------------- triggering
@@ -484,7 +670,6 @@ end)
 -- on the class. Watching the replicated phase is both simpler and independent
 -- of that distinction.
 
-local RESULT_SCREEN = 7   -- ESpyGamePhase
 local reported_phase = nil
 
 LoopAsync(2000, function()
