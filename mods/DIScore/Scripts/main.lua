@@ -206,6 +206,61 @@ local function object_valid(object)
     return false
 end
 
+-- The scrims API wants the AGENT the player used, which is not the player's
+-- name. For bots the two coincide (a bot is named after its agent - "Hans",
+-- "Cavaliere"), but for a human PlayerDisplayName is the account name and the
+-- agent lives in AgentSelection. Three routes are tried and all three are
+-- logged, so the first live match tells us which actually resolves rather than
+-- us guessing at a struct traversal that UE4SS may not support.
+local function agent_of(player_state)
+    local found, how = nil, {}
+
+    -- Route 1: the replicated selection struct.
+    -- ADIPlayerState.AgentSelection.AgentId is an FPrimaryAssetId
+    -- {PrimaryAssetType, PrimaryAssetName}; the name is the interesting half.
+    pcall(function()
+        local sel = player_state.AgentSelection
+        if sel == nil then return end
+        local id = sel.AgentId
+        if id == nil then return end
+        local n = to_string_prop(id.PrimaryAssetName)
+        how[#how + 1] = "AgentSelection=" .. tostring(n)
+        if n ~= nil and n ~= "" and n ~= "None" then found = found or n end
+    end)
+
+    -- Route 2: the accessor, in case the struct read above is opaque.
+    pcall(function()
+        local id = player_state:GetAgentId()
+        if id == nil then return end
+        local n = to_string_prop(id.PrimaryAssetName)
+        how[#how + 1] = "GetAgentId=" .. tostring(n)
+        if n ~= nil and n ~= "" and n ~= "None" then found = found or n end
+    end)
+
+    -- Route 3: the spy pawn's class name, which embeds the agent -
+    -- "BPSpy_Ace_Turquoise_V1_C" -> "Ace". Independent of any struct read.
+    pcall(function()
+        local spy = unwrap(player_state.OwnedSpy)
+        if not object_valid(spy) then return end
+        local cls
+        pcall(function() cls = spy:GetClass():GetFName():ToString() end)
+        if cls == nil then return end
+        local n = cls:match("^BPSpy_([A-Za-z0-9]+)_")
+        how[#how + 1] = "SpyClass=" .. tostring(cls) .. "->" .. tostring(n)
+        if n ~= nil and n ~= "" then found = found or n end
+    end)
+
+    -- Data-asset names carry a prefix ("DA_Agent_Cavaliere"); the API wants the
+    -- bare agent, so strip anything up to the last underscore-delimited prefix
+    -- we recognise. Left as-is when it does not match a known shape.
+    local cleaned = found
+    if cleaned ~= nil then
+        cleaned = cleaned:gsub("^DA_Agent_", ""):gsub("^Agent_", ""):gsub("^DA_", "")
+    end
+
+    return cleaned, table.concat(how, " ")
+end
+
 local function identify(player_state)
     local name = to_string_prop(player_state and player_state.PlayerDisplayName)
     if name == nil or name == "" then
@@ -259,6 +314,7 @@ local function identify(player_state)
     -- unstable. PlayerID is per-match only and is recorded for debugging, never
     -- as a key.
     local ident = {}
+    ident.agent, ident.agent_routes = agent_of(player_state)
     pcall(function() ident.bandit_id_crc = to_number(player_state.BanditIDCRC) end)
     pcall(function() ident.platform_type = to_number(player_state.PlatformType) end)
     pcall(function() ident.player_id = to_number(player_state.PlayerID) end)
@@ -500,6 +556,8 @@ local function report(reason)
                    " unique_id=" .. tostring(ident.unique_id) ..
                    " platform=" .. tostring(ident.platform_type) ..
                    " hide_name=" .. tostring(ident.hide_player_name))
+            append("      agent    = " .. tostring(ident.agent) ..
+                   "   routes: " .. tostring(ident.agent_routes))
 
             -- Source A: the server's own counters.
             local rows, err = read_xp_events(ps)
@@ -569,6 +627,8 @@ local function report(reason)
 
             payload.players[#payload.players + 1] = {
                 name = name,
+                agent = ident.agent,
+                agent_routes = ident.agent_routes,
                 is_bot = is_bot,
                 bandit_id_crc = ident.bandit_id_crc,
                 unique_id = ident.unique_id,
