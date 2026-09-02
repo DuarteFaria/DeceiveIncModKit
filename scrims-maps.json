@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "Game map -> scrims site mapId.",
+    "",
+    "Keyed on the MapRotation SHORT NAME, which DIScore derives from the",
+    "MapData asset name (DA_MapData_FragrantShore -> FragrantShore). This is the",
+    "same vocabulary TripwireServer.ini's MapRotation uses, so the server's",
+    "rotation and this table speak one language.",
+    "",
+    "Why not mapCode: it does not separate the variants. LVL_FragrantShore",
+    "(confirmed Day) reports mapCode 'fs', which the Night variant shares, so",
+    "keying on the code would silently file Night matches as Day.",
+    "",
+    "NOTE the asymmetric naming, from docs/01-server-config.md: Hardsell is the",
+    "NIGHT map with an explicit Hardsell_Day variant, while FragrantShore is the",
+    "DAY map with an explicit FragrantShore_Night variant. The user confirmed",
+    "LVL_FragrantShore = Fragrant Shore (Day), which corroborates it.",
+    "",
+    "Resolution order is map_short_name, then map_file_name, then map_code, then",
+    "the level name - so the older file-name keys still work for a report",
+    "produced before the short name existed.",
+    "",
+    "UNVERIFIED: mapId values were transcribed from a screenshot of the site's",
+    "table - 32-character random strings, so one misread character silently",
+    "targets the wrong map. Only Fragrant Shore (Day) and Sound Eclipse have",
+    "been exercised against the live API so far."
+  ],
+
+  "maps": {
+    "Hardsell": {
+      "mapId": "jx73nb4yf4w82s60y16sttyhts7gy2ff",
+      "name": "Hard Sell (Night)",
+      "note": "base Hardsell is the night map"
+    },
+    "Hardsell_Day": {
+      "mapId": "jx7cbar3qvexd11xx2gv660j1n7gypss",
+      "name": "Hard Sell (Day)"
+    },
+    "SoundEclipse": {
+      "mapId": "jx7cv7drtffmwrs29zhbmw8m597gz116",
+      "name": "Sound Eclipse",
+      "verified_live": true
+    },
+    "FragrantShore": {
+      "mapId": "jx79es6gn8p9xehcbvr1bx19xs7gznn1",
+      "name": "Fragrant Shore (Day)",
+      "verified_live": true,
+      "note": "base FragrantShore is the DAY map; user-confirmed 2026-09-02"
+    },
+    "FragrantShore_Night": {
+      "mapId": "jx7d9zaq7ywf4jw9dc319e61q17gzqg4",
+      "name": "Fragrant Shore (Night)"
+    },
+    "Silverreef": {
+      "mapId": "jx775q302hjc9gtmnyw4tpye8x7gyt4h",
+      "name": "Silver Reef"
+    },
+    "Diamondspire": {
+      "mapId": "jx78v03gsn9t9hjyt49k7v1yk57gz0qa",
+      "name": "Diamond Spire"
+    },
+
+    "LVL_FragrantShore": {
+      "mapId": "jx79es6gn8p9xehcbvr1bx19xs7gznn1",
+      "name": "Fragrant Shore (Day)",
+      "note": "file-name fallback for reports predating map_short_name"
+    },
+    "LVL_Soundeclipse": {
+      "mapId": "jx7cv7drtffmwrs29zhbmw8m597gz116",
+      "name": "Sound Eclipse",
+      "note": "file-name fallback for reports predating map_short_name"
+    },
+    "LVL_Silverreef": {
+      "mapId": "jx775q302hjc9gtmnyw4tpye8x7gyt4h",
+      "name": "Silver Reef",
+      "verified_live": true,
+      "note": "file-name fallback for reports predating map_short_name"
+    },
+
+    "se": {
+      "mapId": "jx7cv7drtffmwrs29zhbmw8m597gz116",
+      "name": "Sound Eclipse",
+      "verified_live": true,
+      "note": "mapCode is safe here - Sound Eclipse has no Day/Night variant"
+    },
+    "sr": {
+      "mapId": "jx775q302hjc9gtmnyw4tpye8x7gyt4h",
+      "name": "Silver Reef",
+      "note": "mapCode is safe here - Silver Reef has no Day/Night variant"
+    },
+    "ds": {
+      "mapId": "jx78v03gsn9t9hjyt49k7v1yk57gz0qa",
+      "name": "Diamond Spire",
+      "note": "mapCode is safe here - Diamond Spire has no Day/Night variant. UNVERIFIED: code guessed from the sr/se/fs pattern, not yet observed live"
+    }
+  }
+}

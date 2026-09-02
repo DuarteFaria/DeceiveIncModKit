@@ -109,15 +109,14 @@ Nothing can be clamped away, so a plain read is the entire feature.
 **Bots are scored the same as humans.** Bot player states carry populated
 `XpData` (a bot read `Intel=1`), so no special handling is needed.
 
-**The hook does not work, and is not needed.** `RegisterHook` on
-`HandleXPEvent` reported `registered=true` but never fired once, while the poll
-showed `Kill=2` — UE4SS intercepts `ProcessEvent`, and this is a native C++
-call that never passes through it. `HandleVaultTerminalDeactivation` likewise
-never fired. Both hooks are left in place at zero cost.
+**The hooks produced nothing, and then one of them crashed the server.**
+`RegisterHook` on `HandleXPEvent` reported `registered=true` but never fired
+once across three matches, while the poll showed real numbers. The conclusion
+was that UE4SS intercepts `ProcessEvent` and these are native C++ calls that
+never reach it.
 
-This retires the fallback plan as written: the gameplay-event route relies on
-the same native functions and would hit the identical wall. It would need the
-Stage 3 native invoker, not Lua hooks. Since the XP gate is open, that is moot.
+That was only half right, and the other half cost a server. See "The crash"
+below.
 
 **Two bugs found and fixed:**
 
@@ -162,6 +161,63 @@ not a defect — this match ended by last-man-standing, so nobody hacked a
 terminal, entered the vault or touched the package. Closing it needs a match
 where those objectives are actually played. The counters are structurally
 present and correctly capped in every report so far.
+
+## The crash, 2026-09-02
+
+Hacking a vault terminal killed the dedicated server. It was the mod's fault.
+
+```
+12:51:14.935  CompleteInteraction [BP_VaultUnlockTerminal_C_2147475135]
+12:51:14.935  5 Resource of type EGameplayResourcesType::Intel added
+12:51:14.974  Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading 0x11e1
+              [Callstack] ue4ss.dll   <- top five frames
+12:51:15.045  FPlatformMisc::RequestExitWithStatus(1, 3)
+```
+
+Both earlier test matches ended by last-man-standing, so **no terminal had ever
+been hacked and neither gameplay hook had ever actually fired.** The "never
+fires" finding was an artefact of that. The first time one did fire, it took the
+process down 39ms later, with every top stack frame inside `ue4ss.dll` - the Lua
+layer, not the game.
+
+The cause was what the callbacks did, not that they existed. Both called
+`identify()`, which had grown an agent lookup using
+`player_state:GetAgentId()` - a game UFunction returning `FPrimaryAssetId` **by
+value**, invoked from inside a `ProcessEvent` hook. `pcall` cannot catch a native
+access violation, which is why nothing was logged and why the error surfaced only
+in the engine log. The terminal also granted Intel, so `HandleXPEvent` may have
+been the one that fired rather than `HandleVaultTerminalDeactivation`; the log
+cannot distinguish them, and it does not matter because both shared the call.
+
+**Fixes applied:**
+
+- Both gameplay hooks **deleted**, not repaired. The poll is the entire feature
+  and neither hook had ever contributed a number, so keeping them was pure risk.
+  The only hook left is `GameModeBase:StartPlay`, whose callback touches no
+  UObject at all - it assigns a match id and appends a line.
+- `GetAgentId()` removed from the agent lookup. Nothing in the mod calls a game
+  UFunction returning a struct by value any more. The remaining routes are
+  class-name reflection (`BPSpy_Ace_Turquoise_V1_C` → `Ace`) and plain property
+  reads, tried in that order.
+- All the dead tally machinery (`hook_tally`, `record_fire`, the `HOOK` and
+  `DIVERGE` report lines) removed with them.
+
+**The transferable rule:** a hook callback may record cheap facts ONLY - no game
+UFunction calls, no struct traversal, no identity resolution. Defer all of that
+to the report path, which runs from `LoopAsync` outside any hook and has been
+exercised many times without incident.
+
+And the correction to a claim made earlier in this doc: "read-only" is not by
+itself sufficient for crash-safety. This mod wrote no property and called no
+side-effecting function, and still killed the server. *Where* a read happens
+matters as much as what it reads.
+
+**Residual risk, stated honestly:** the report path still calls two game
+UFunctions - `CanGiveXpEvent()` (bool, exercised live several times) and
+`GetCurrentMapData()` (returns a UObject pointer, added for the scrims work and
+**not yet run live**). Both are `pcall`-wrapped and neither returns a struct by
+value, so they are far milder than the call that crashed, but the map read is
+unproven.
 
 ## Website integration
 
@@ -232,6 +288,116 @@ rather than trusting ours.
 only what scored. `raw_count` versus `counted` exposes any cap that was applied -
 they differ only if a `MaxTrigger` ever disagrees with our table, which has not
 happened yet.
+
+### Map rotation must match the lobby lineup
+
+A rotation that disagrees with the lobby is not a scripting error, but it
+silently breaks scoring: the site files a result under the map it expected at
+that index, so a match played on a map the lineup does not have at that position
+never appears. This bit a real scrim - map 3 of the lineup was Fragrant Shore
+(Night) while the server served something else.
+
+`dimod launch` now fixes this by itself for `scrims_watch` profiles:
+
+```
+GET /api/lobbies/<id>/map-lineup  ->  short names  ->  TripwireServer.ini
+```
+
+It writes one **repeated `MapRotation=` line per map** in lineup order, plus
+`bRandomizeMap=False` so the server walks them round-robin from index 0.
+
+Repeated keys, not one comma-separated line. `docs/01-server-config.md` used to
+say comma-separated and it is wrong - the engine log settled it:
+
+```
+ignoring MapRotation entry 'Diamondspire,SoundEclipse,...'
+```
+
+after which the server fell back to its default pool and served Hardsell_Day
+twice. `set_ini_keys` now emits a line per element for any list value.
+
+#### Resuming after a restart
+
+The server always starts a rotation at index 0, so resuming mid-scrim means the
+**rotation itself has to start at the right map**. The sync therefore reads the
+scores endpoint too and drops the slots already scored:
+
+```
+GET /map-lineup  +  GET /scores   ->  the unplayed slots, in order
+```
+
+So `dimod.py restart scoring` is safe at any point in a scrim: it works out
+where you are from what the site already holds. `--full-rotation` overrides it
+to replay a lineup from map 1.
+
+#### When the lineup is finished
+
+The last map is scored and there is nothing left to play. The rotation comes
+back **empty**, and that is a normal end state, not an error:
+
+- `sync-rotation` writes nothing and says `the scrim is complete`. The INI is
+  left exactly as it was, so the server still starts on whatever rotation it
+  already had - the scrim being over is no reason to refuse to boot.
+- The pusher exits **3** (`EXIT_LINEUP_DONE`) to distinguish this from a
+  failure. `dimod.py sync-rotation` maps it to exit 0.
+- The watcher keeps running, but **refuses to push**. Any further match lands
+  on a slot that already holds scores, and overwriting a finished scrim's
+  results is data loss on the site. It says so once and stops reconsidering
+  that match, rather than reprinting the refusal every tick.
+
+To play the lineup again, either start a new lobby or
+`tools/scrims_push.py --print-rotation --full-rotation`. To deliberately replace
+one result, push it by hand with `--allow-replace`.
+
+An earlier version of this got it badly wrong. `sync_scrims_rotation` read the
+**last line** of the pusher's combined stdout+stderr as the rotation value; on
+an exhausted lineup the rotation line is empty, so `.strip()` removed it and the
+last line was a *note*. The result was:
+
+```ini
+MapRotation=[2m  every lineup map is already scored - nothing left to play[0m
+```
+
+written straight into `TripwireServer.ini`. The fix is a real contract - the
+pusher puts its reasoning on **stderr** and only the rotation on **stdout**, so
+the caller reads stdout whole instead of guessing which line is the answer -
+plus a `[A-Za-z0-9_]+` check on every entry before anything is written, so a
+future break in that contract leaves the rotation alone instead of corrupting
+it.
+
+#### A lineup slot is identified by `mapIndex`, never by `mapId`
+
+A lineup may legitimately play the same map twice - a real one was
+`DS > SE > FSN > SR > HSD > DS`. Two of its slots share a `mapId`, so a set of
+scored `mapId`s cannot tell slot 0 from slot 5. Keying the skip on `mapId`
+dropped **both** Diamond Spires the moment the first was played, and the same
+mistake in `resolve_map_index` would have filed the second one on top of the
+first.
+
+Both now key on `mapIndex`. When a map appears more than once,
+`resolve_map_index` files the result at the first slot for that map that is not
+yet scored - the match being pushed has not been scored yet, so that is the one
+just played. If every slot for the map is already scored the push is a
+correction, and with several candidate slots it cannot be known which; it takes
+the last and says `AMBIGUOUS` out loud.
+
+Score rows without a usable `mapIndex` are ignored rather than guessed at: that
+errs toward replaying a map, which is visible and fixable, instead of silently
+skipping one.
+
+Choosing the map itself is still **by `mapId`, never by name**. The lineup
+reports `"Fragrant Shore"` with no Day/Night suffix, so the name cannot pick a
+variant. The id can.
+
+Run at **launch**, not at apply: `MapRotation` and `bRandomizeMap` are in
+`MANAGED_TRIPWIRE_KEYS`, so `apply` resets them to baseline first. Launch is the
+last point before the server reads the file. Manually: `dimod.py sync-rotation`,
+or `tools/scrims_push.py --print-rotation` to see the reasoning without writing.
+
+A lineup map with no entry in `scrims-maps.json` **refuses the whole sync** - a
+partial rotation would shift every later map and quietly corrupt the mapping.
+Failure is never fatal to the launch, only loud: the server starts with its old
+rotation and says so.
 
 ### Identity
 

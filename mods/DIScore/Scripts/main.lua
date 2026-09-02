@@ -17,20 +17,31 @@
 --   EnterVault/FirstObjectivePickup/PickupObjective are 1 - so the clamping
 --   worry does not exist and a plain read is the whole feature.
 --
---   HOOK does not work and is not needed. RegisterHook on HandleXPEvent
---   reports registered=true but never fires, because UE4SS intercepts
---   ProcessEvent and this is a native C++ call that never goes through it.
---   Same for HandleVaultTerminalDeactivation. Both hooks are left in place:
---   they cost nothing, and they would start reporting if the game ever routed
---   these through the reflected path.
+--   HOOKS ARE GONE, and this is the important lesson. RegisterHook on
+--   HandleXPEvent and HandleVaultTerminalDeactivation reported
+--   registered=true but produced nothing across three live matches - the
+--   earlier conclusion was that UE4SS intercepts ProcessEvent while these are
+--   native C++ calls that never reach it.
 --
--- The consequence for the fallback plan is worth recording: if XP had been
--- gated off, the gameplay-event route would have hit this same wall, since
--- those are native calls too. It would need the Stage 3 native invoker rather
--- than Lua hooks.
+--   That conclusion was only half right. On 2026-09-02, the first time a vault
+--   terminal was ever actually hacked, one of the two DID fire and killed the
+--   server: EXCEPTION_ACCESS_VIOLATION, status-3 exit, top five stack frames
+--   all inside ue4ss.dll, 39ms after CompleteInteraction on
+--   BP_VaultUnlockTerminal_C. The callbacks called identify(), which resolved
+--   the agent via player_state:GetAgentId() - a game UFunction returning a
+--   struct by value, invoked from inside a ProcessEvent hook. pcall cannot
+--   catch a native access violation, so nothing was logged.
 --
--- Read-only. No property is written and no function with side effects is
--- called, so none of the crash modes in docs/05-findings.md apply.
+--   Both hooks were deleted rather than repaired: the poll below is the entire
+--   feature and neither hook had ever contributed a number. The transferable
+--   rule is that a hook callback may record cheap facts ONLY - no game
+--   UFunction calls, no struct traversal, no identity resolution. All of that
+--   belongs in the report path, which runs from LoopAsync outside any hook.
+--
+-- Read-only in the sense that matters for gameplay: no property is written and
+-- no side-effecting function is called. That is NOT by itself enough to be
+-- crash-safe, as the above shows - WHERE a read happens matters as much as
+-- what it reads. See docs/05-findings.md.
 --
 -- Output: Win64/DIScore.log
 
@@ -269,33 +280,19 @@ end
 -- agent lives in AgentSelection. Three routes are tried and all three are
 -- logged, so the first live match tells us which actually resolves rather than
 -- us guessing at a struct traversal that UE4SS may not support.
+-- Routes are ordered least to most dangerous, and the first hit wins.
+--
+-- `player_state:GetAgentId()` USED to be one of them and has been removed: it
+-- is a game UFunction returning FPrimaryAssetId by value, and invoking that is
+-- the prime suspect for the 2026-09-02 status-3 crash (see the header). Nothing
+-- here calls a game UFunction any more - only class-name reflection and plain
+-- property reads.
 local function agent_of(player_state)
     local found, how = nil, {}
 
-    -- Route 1: the replicated selection struct.
-    -- ADIPlayerState.AgentSelection.AgentId is an FPrimaryAssetId
-    -- {PrimaryAssetType, PrimaryAssetName}; the name is the interesting half.
-    pcall(function()
-        local sel = player_state.AgentSelection
-        if sel == nil then return end
-        local id = sel.AgentId
-        if id == nil then return end
-        local n = to_string_prop(id.PrimaryAssetName)
-        how[#how + 1] = "AgentSelection=" .. tostring(n)
-        if n ~= nil and n ~= "" and n ~= "None" then found = found or n end
-    end)
-
-    -- Route 2: the accessor, in case the struct read above is opaque.
-    pcall(function()
-        local id = player_state:GetAgentId()
-        if id == nil then return end
-        local n = to_string_prop(id.PrimaryAssetName)
-        how[#how + 1] = "GetAgentId=" .. tostring(n)
-        if n ~= nil and n ~= "" and n ~= "None" then found = found or n end
-    end)
-
-    -- Route 3: the spy pawn's class name, which embeds the agent -
-    -- "BPSpy_Ace_Turquoise_V1_C" -> "Ace". Independent of any struct read.
+    -- Route 1: the spy pawn's class name - "BPSpy_Ace_Turquoise_V1_C" -> "Ace".
+    -- Pure reflection over an FName, the cheapest and best-proven read in the
+    -- kit, and it touches no struct at all.
     pcall(function()
         local spy = unwrap(player_state.OwnedSpy)
         if not object_valid(spy) then return end
@@ -306,6 +303,21 @@ local function agent_of(player_state)
         how[#how + 1] = "SpyClass=" .. tostring(cls) .. "->" .. tostring(n)
         if n ~= nil and n ~= "" then found = found or n end
     end)
+
+    -- Route 2: the replicated selection struct. A nested read
+    -- (AgentSelection.AgentId.PrimaryAssetName), so it is tried only if the
+    -- class name did not answer.
+    if found == nil then
+        pcall(function()
+            local sel = player_state.AgentSelection
+            if sel == nil then return end
+            local id = sel.AgentId
+            if id == nil then return end
+            local n = to_string_prop(id.PrimaryAssetName)
+            how[#how + 1] = "AgentSelection=" .. tostring(n)
+            if n ~= nil and n ~= "" and n ~= "None" then found = found or n end
+        end)
+    end
 
     -- Data-asset names carry a prefix ("DA_Agent_Cavaliere"); the API wants the
     -- bare agent, so strip anything up to the last underscore-delimited prefix
@@ -404,20 +416,6 @@ end
 --
 -- Keyed by PlayerState full name rather than by the object, because UObject
 -- wrappers must never be retained across callbacks (docs/05-findings.md).
-
-local hook_tally = {}    -- [ps_full_name] = { name=, [event_id] = count }
-local hook_fires = 0
-
-local function record_fire(ps_full, display_name, event_id, amount)
-    local row = hook_tally[ps_full]
-    if row == nil then
-        row = { name = display_name }
-        hook_tally[ps_full] = row
-    end
-    row.name = display_name or row.name
-    row[event_id] = (row[event_id] or 0) + 1
-    row["amount_" .. event_id] = (row["amount_" .. event_id] or 0) + (amount or 0)
-end
 
 -- ------------------------------------------------------------ poll tally
 
@@ -579,6 +577,17 @@ local function map_identity(gs)
         out.map_code = to_string_prop(md.mapCode)
         out.map_file_name = to_string_prop(md.MapFileName)
         out.map_data_object = full(md)
+        -- The asset name minus its prefix is the MapRotation "short name"
+        -- (DA_MapData_Tutorial -> Tutorial, per the PickMap log line). This is
+        -- the best map key available: it is the same vocabulary the server's
+        -- own rotation uses, and unlike mapCode it separates the Day and Night
+        -- variants - Hardsell/Hardsell_Day and FragrantShore/FragrantShore_Night.
+        local asset
+        pcall(function() asset = md:GetFName():ToString() end)
+        if asset ~= nil then
+            out.map_asset = asset
+            out.map_short_name = asset:gsub("^DA_MapData_", "")
+        end
     end)
     return out
 end
@@ -595,6 +604,74 @@ local function mp_table_json()
         t[w.field] = { event = "MatchWin", match_result = result, mp = w.mp, cap = 1 }
     end
     return t
+end
+
+-- ------------------------------------------------------- catalogue recon
+--
+-- One-shot dump of the two catalogues the scrims push needs to translate the
+-- game's vocabulary into the site's. Written once per server run.
+--
+-- Why this exists rather than a hardcoded table: the live 2026-09-02 run showed
+-- bot "Red" playing spy class BPSpy_Socialite_..., i.e. the internal agent
+-- codename is NOT the display name, so guessing the mapping is unsafe. Same
+-- story for maps - the site distinguishes Day/Night variants and only the
+-- game knows which mapCode belongs to which.
+--
+-- FText is deliberately not relied on. MapDisplayName read back nil on the
+-- dedicated server (localisation data is almost certainly not loaded there), so
+-- the FString fields - mapCode, MapFileName, AgentBalancingName - plus each
+-- asset's own object name are the usable keys. FText is still attempted and
+-- logged, in case it turns out to work for some assets.
+
+local CATALOGUE_OUT = "DIScore.catalogue.txt"
+
+local function catalogue()
+    local function w(line)
+        local fh = io.open(CATALOGUE_OUT, "a")
+        if fh then fh:write(tostring(line) .. "\n"); fh:close() end
+    end
+
+    w("")
+    w("======== DIScore catalogue " .. os.date("!%Y-%m-%dT%H:%M:%SZ") .. " ========")
+
+    for _, class_name in ipairs({ "AgentData", "MapData" }) do
+        local objs
+        pcall(function() objs = FindAllOf(class_name) end)
+        local n = objs and #objs or 0
+        w("")
+        w("---- " .. class_name .. " (" .. tostring(n) .. ")")
+        for i = 1, n do
+            local o = objs[i]
+            local is_class = false
+            pcall(function() is_class = o:IsAnyClass() end)
+            if not is_class then
+                local parts = {}
+                local function field(label, getter)
+                    local v
+                    if pcall(function() v = getter() end) and v ~= nil and v ~= "" then
+                        parts[#parts + 1] = label .. "=" .. tostring(v)
+                    else
+                        parts[#parts + 1] = label .. "=nil"
+                    end
+                end
+                field("object", function() return o:GetFName():ToString() end)
+                if class_name == "AgentData" then
+                    field("balancing", function() return to_string_prop(o.AgentBalancingName) end)
+                    field("name_ftext", function() return to_string_prop(o.AgentName) end)
+                    field("released", function() return o.bIsAgentReleased end)
+                    field("canBot", function() return o.bCanSpawnAsBot end)
+                else
+                    field("code", function() return to_string_prop(o.mapCode) end)
+                    field("file", function() return to_string_prop(o.MapFileName) end)
+                    field("display_ftext", function() return to_string_prop(o.MapDisplayName) end)
+                end
+                w("   " .. table.concat(parts, "  "))
+            end
+        end
+    end
+
+    w("======== END catalogue ========")
+    print("[DIScore] catalogue written -> " .. CATALOGUE_OUT .. "\n")
 end
 
 local function report(reason)
@@ -617,7 +694,10 @@ local function report(reason)
     payload.map_display_name = mid.map_display_name
     payload.map_code = mid.map_code
     payload.map_file_name = mid.map_file_name
-    append("map level=" .. tostring(payload.map) ..
+    payload.map_short_name = mid.map_short_name
+    payload.map_asset = mid.map_asset
+    append("map short=" .. tostring(mid.map_short_name) ..
+           " level=" .. tostring(payload.map) ..
            " display=" .. tostring(mid.map_display_name) ..
            " code=" .. tostring(mid.map_code) ..
            " file=" .. tostring(mid.map_file_name) ..
@@ -644,8 +724,6 @@ local function report(reason)
         payload.match_result = result
         payload.match_result_name = MATCH_RESULTS[result or -1]
     end
-
-    append("hook fires observed so far: " .. tostring(hook_fires))
 
     local states
     pcall(function() states = FindAllOf("DIPlayerState") end)
@@ -687,37 +765,6 @@ local function report(reason)
                     local scored = MP[r.event] and "" or "   (not scored)"
                     append(string.format("      POLL     %-22s trigger=%-3d max=%-3d%s",
                            event_name(r.event), r.trigger, r.max, scored))
-                end
-            end
-
-            -- Source B: what we counted ourselves off the hook.
-            local hook_row = hook_tally[ps_full]
-            local hook_counts = {}
-            if hook_row == nil then
-                append("      HOOK     = <no fires seen for this player>")
-            else
-                local ids = {}
-                for k in pairs(hook_row) do
-                    if type(k) == "number" then ids[#ids + 1] = k end
-                end
-                table.sort(ids)
-                for _, id in ipairs(ids) do
-                    hook_counts[id] = hook_row[id]
-                    append(string.format("      HOOK     %-22s fires=%-3d xp=%d",
-                           event_name(id), hook_row[id], hook_row["amount_" .. id] or 0))
-                end
-            end
-
-            -- Only meaningful while the hook is actually delivering. It is not
-            -- (native call, see the header), so gating on hook_fires keeps this
-            -- from printing "poll=N hook=0" against every scored event forever.
-            if hook_fires > 0 then
-                for id in pairs(MP) do
-                    local p, h = poll_counts[id] or 0, hook_counts[id] or 0
-                    if p ~= h then
-                        append(string.format("      DIVERGE  %-22s poll=%d hook=%d",
-                               event_name(id), p, h))
-                    end
                 end
             end
 
@@ -791,50 +838,22 @@ local function register(path, callback)
     return ok
 end
 
--- The funnel. Every scoring event in the Mission Report passes through here.
-register("/Script/DeceiveInc.DeceiveIncGameStateBase:HandleXPEvent",
-    function(self, player_state_param, event_type_param, amount_param)
-        local ok, err = pcall(function()
-            local ps = unwrap(player_state_param)
-            local event_id = to_number(unwrap(event_type_param))
-            local amount = to_number(unwrap(amount_param)) or 0
+-- REMOVED 2026-09-02: the HandleXPEvent and HandleVaultTerminalDeactivation
+-- hooks were registered here. One of them fired for the first time when a vault
+-- terminal was finally hacked and took the server down with an
+-- EXCEPTION_ACCESS_VIOLATION whose top frames were all ue4ss.dll. They are
+-- deleted rather than made safe: the poll is the whole feature, and in three
+-- live matches neither hook ever contributed a single number.
+--
+-- The rule learned, if a hook is ever needed again: a callback may record cheap
+-- facts ONLY. No game UFunction calls, no struct traversal, no identity
+-- resolution. Defer all of that to the report path, which runs from LoopAsync
+-- outside any game hook.
 
-            hook_fires = hook_fires + 1
-
-            local ps_full = full(ps)
-            local name, is_bot = "<nil playerstate>", false
-            if ps ~= nil then name, is_bot = identify(ps) end
-
-            if event_id ~= nil and ps ~= nil then
-                record_fire(ps_full, name, event_id, amount)
-            end
-
-            append(string.format("XP  %-22s amount=%-5s %s %s  [%s]",
-                   event_name(event_id), tostring(amount),
-                   is_bot and "BOT  " or "HUMAN", name, ps_full))
-        end)
-        if not ok then append("XP hook error: " .. tostring(err)) end
-    end)
-
--- Independent corroboration for the +2 terminal rule: this fires from the
--- gameplay side, not the XP side, so if XP is gated off server-side this hook
--- still proves terminal attribution is reachable.
-register("/Script/DeceiveInc.DeceiveIncGameStateBase:HandleVaultTerminalDeactivation",
-    function(self, player_state_param)
-        local ok, err = pcall(function()
-            local ps = unwrap(player_state_param)
-            local name = "<nil>"
-            if ps ~= nil then name = (identify(ps)) end
-            append("TERMINAL deactivation by " .. name .. "  [" .. full(ps) .. "]")
-        end)
-        if not ok then append("terminal hook error: " .. tostring(err)) end
-    end)
-
--- Clear per-match state so a second match in the same server process does not
--- inherit the first one's tally.
+-- Mint a fresh match id so a second match in the same server process does not
+-- reuse the first one's. Deliberately the ONLY hook left, and its callback
+-- touches no UObject at all - it assigns two locals and appends a line.
 register("/Script/Engine.GameModeBase:StartPlay", function()
-    hook_tally = {}
-    hook_fires = 0
     local id = new_match_id()
     append("")
     append("==== StartPlay: tally cleared, match_id=" .. tostring(id) .. " ====")
@@ -849,6 +868,7 @@ end)
 -- of that distinction.
 
 local reported_phase = nil
+local catalogue_done = false
 
 LoopAsync(2000, function()
     -- Manual mid-match snapshot.
@@ -857,6 +877,14 @@ LoopAsync(2000, function()
         marker:close()
         os.remove(TRIGGER)
         pcall(report, "manual-trigger")
+    end
+
+    -- One-shot catalogue dump. Runs from this poll rather than at load time so
+    -- the data assets are certain to exist, and outside any hook.
+    if not catalogue_done then
+        catalogue_done = true
+        local ok, err = pcall(catalogue)
+        if not ok then append("catalogue error: " .. tostring(err)) end
     end
 
     -- Auto-report once, when the match reaches the result screen.

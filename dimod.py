@@ -36,10 +36,15 @@ The kit is the source of truth. Nothing is authored inside the game folder;
                                       on deploy (purple = technician)
   python dimod.py rescue [player]     teleport a player who fell out of the
                                       world back onto solid ground
+  python dimod.py sync-rotation       point MapRotation at the lobby's lineup
   python dimod.py score-report        ask DIScore for a mid-match MP report
   python dimod.py score-log [n]       tail the MP scoring report
+
+With the `scoring` profile applied, `launch` also starts the scrims pusher in
+watch mode, so every finished match is scored and pushed with no further input;
+`stop` shuts it down again.
 """
-import glob, json, os, shutil, subprocess, sys, time
+import glob, json, os, re, shutil, subprocess, sys, time
 
 KIT = os.path.dirname(os.path.abspath(__file__))
 SERVER = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server"
@@ -193,7 +198,22 @@ def write_mods_txt(enabled_map):
 
 
 def set_ini_keys(path, updates, section=None):
-    """Minimal ini rewrite that preserves unrelated lines."""
+    """Minimal ini rewrite that preserves unrelated lines.
+
+    A list value is written as REPEATED keys, one line per element, in order.
+    That is how UE populates a TArray<FString>, and MapRotation is one.
+    Comma-separating them does NOT work - proven 2026-09-02, the server logged
+
+      ignoring MapRotation entry 'A,B,C', no playable map matches
+      MapData:DA_MapData_A,B,C
+
+    i.e. it took the whole string as a single entry and fell back to the default
+    map pool. docs/01-server-config.md claimed comma-separated and was wrong."""
+    def emit(key, value):
+        if isinstance(value, (list, tuple)):
+            return [f"{key}={item}" for item in value]
+        return [f"{key}={value}"]
+
     lines = []
     if os.path.isfile(path):
         lines = open(path, encoding="utf-8-sig").read().splitlines()
@@ -203,8 +223,11 @@ def set_ini_keys(path, updates, section=None):
         s = line.strip()
         key = s.split("=")[0].strip() if "=" in s and not s.startswith(";") else None
         if key and key in updates:
+            # First occurrence becomes the whole (possibly multi-line) value;
+            # any later duplicates are dropped, so a shorter rotation cannot
+            # leave stale entries behind.
             if key not in seen:
-                out.append(f"{key}={updates[key]}")
+                out.extend(emit(key, updates[key]))
                 seen.add(key)
             continue
         out.append(line)
@@ -212,7 +235,7 @@ def set_ini_keys(path, updates, section=None):
         if k not in seen:
             if section and f"[{section}]" not in "\n".join(out):
                 out.append(f"[{section}]")
-            out.append(f"{k}={v}")
+            out.extend(emit(k, v))
     with open(path, "w", encoding="utf-8-sig") as f:
         f.write("\n".join(out) + "\n")
 
@@ -449,6 +472,143 @@ def cmd_vanilla(remove_ue4ss=False):
     print(c("g", "\n  stock state restored.\n"))
 
 
+# Written by launch, read by stop. A pid file rather than state in
+# .deployed.json, because the watcher's lifetime is tied to a server run and not
+# to which profile is deployed.
+WATCHER_PID = os.path.join(KIT, ".scrims-watcher.pid")
+
+
+def python_exe():
+    exe = sys.executable
+    if os.path.basename(exe).lower() == "pythonw.exe":
+        cand = os.path.join(os.path.dirname(exe), "python.exe")
+        if os.path.isfile(cand):
+            return cand
+    return exe
+
+
+EXIT_LINEUP_DONE = 3   # tools/scrims_push.py: the lineup is finished
+
+
+def sync_scrims_rotation():
+    """Point the server's map rotation at the lobby's lineup.
+
+    A mismatched rotation is not a scripting error but it silently breaks
+    scoring: the site files a result under the map it expected at that index,
+    so a match played on the wrong map never shows up.
+
+    Run at LAUNCH, not at apply: MapRotation and bRandomizeMap are in
+    MANAGED_TRIPWIRE_KEYS, so `apply` resets them to baseline first. Launch is
+    the last point before the server reads the file.
+
+    -> True   the rotation was written
+       None   nothing to do: not a scrims profile, or the lineup is finished
+       False  it failed
+
+    None and False are deliberately distinct: a finished scrim is a normal end
+    state and must not be reported as an error. Never fatal either way - a
+    rotation we could not sync is worth a loud warning, not a refusal to start
+    the server."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return None
+    if not os.path.isfile(os.path.join(KIT, ".env")):
+        return None
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    if not os.path.isfile(pusher):
+        return None
+
+    print(c("b", "\n  syncing map rotation to the lobby lineup"))
+    r = subprocess.run([python_exe(), pusher, "--print-rotation"],
+                       capture_output=True, text=True, cwd=KIT)
+    # The pusher puts its reasoning on stderr and ONLY the rotation on stdout.
+    for line in (r.stderr or "").splitlines():
+        print("  " + line)
+
+    if r.returncode == EXIT_LINEUP_DONE:
+        print(c("d", "    the server still starts, on whatever rotation it has."))
+        return None
+    if r.returncode:
+        print(c("y", "  ! rotation NOT synced - the server keeps its current one."))
+        print(c("d", "    Scores for a map the lobby does not expect will not appear."))
+        return False
+
+    rotation = (r.stdout or "").strip()
+    if not rotation:
+        print(c("y", "  ! lineup returned no maps - rotation left alone"))
+        return False
+
+    # A LIST, so set_ini_keys emits one MapRotation= line per map. A single
+    # comma-separated line is parsed as one entry and silently discarded.
+    entries = [m.strip() for m in rotation.split(",") if m.strip()]
+
+    # Anything that is not a bare map name means the contract above broke, and
+    # writing it would corrupt the rotation silently - which is exactly what
+    # happened while this read the last line of a combined stream.
+    bad = [e for e in entries if not re.fullmatch(r"[A-Za-z0-9_]+", e)]
+    if bad:
+        print(c("y", f"  ! unexpected rotation output {bad!r} - rotation left alone"))
+        return False
+    set_ini_keys(TRIPWIRE, {"MapRotation": entries, "bRandomizeMap": "False"})
+    for i, m in enumerate(entries):
+        print(c("g", f"  MapRotation={m}") + c("d", f"   (map {i})"))
+    print(c("d", "  bRandomizeMap=False (round-robin, so match N is lineup map N)"))
+    return True
+
+
+def start_scrims_watcher():
+    """Spawn the scrims pusher in --watch mode for profiles that ask for it.
+
+    Opt-in per profile ("scrims_watch": true) so an ordinary profile never
+    starts a process that talks to the network. Skipped with an explanation if
+    .env is missing, rather than starting a watcher that will only fail."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return
+    if not os.path.isfile(os.path.join(KIT, ".env")):
+        print(c("y", "  scrims watcher not started: no .env "
+                     "(copy .env.example and fill it in)"))
+        return
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    if not os.path.isfile(pusher):
+        print(c("r", "  scrims watcher not started: tools/scrims_push.py missing"))
+        return
+
+    exe = sys.executable
+    if os.path.basename(exe).lower() == "pythonw.exe":
+        cand = os.path.join(os.path.dirname(exe), "python.exe")
+        if os.path.isfile(cand):
+            exe = cand
+
+    # Its own console window: the whole point is that pushes are visible
+    # without the user going looking for a log.
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    try:
+        proc = subprocess.Popen([exe, pusher, "--watch"], cwd=KIT, creationflags=flags)
+    except Exception as e:
+        print(c("r", f"  scrims watcher failed to start: {e}"))
+        return
+    with open(WATCHER_PID, "w", encoding="ascii") as f:
+        f.write(str(proc.pid))
+    print(c("g", f"  scrims watcher started (pid {proc.pid}) - scores push automatically"))
+
+
+def stop_scrims_watcher():
+    try:
+        with open(WATCHER_PID, encoding="ascii") as f:
+            pid = int(f.read().strip())
+    except Exception:
+        return
+    os.remove(WATCHER_PID)
+    # taskkill rather than ctypes: the watcher owns a console, and its child
+    # python process should go with it.
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                   capture_output=True, text=True)
+    print(c("d", f"  scrims watcher stopped (pid {pid})"))
+
+
 def cmd_launch(mode=None):
     if server_pid():
         print(c("y", "  server already running"))
@@ -476,6 +636,7 @@ def cmd_launch(mode=None):
     if not os.path.isfile(inject):
         print(c("r", "  tools/inject.py missing"))
         return 1
+    sync_scrims_rotation()
     print(c("b", "\n  launching server (direct exe, no EAC) + injecting UE4SS\n"))
     # capture and re-print, so callers that redirect stdout (the GUI) see it
     exe = sys.executable
@@ -507,13 +668,18 @@ def cmd_launch(mode=None):
         native = subprocess.run([exe, loader], capture_output=True, text=True)
         for line in (native.stdout or "").splitlines(): print("  " + line)
         for line in (native.stderr or "").splitlines(): print("  " + line)
-        return native.returncode
+        if native.returncode:
+            return native.returncode
+        start_scrims_watcher()
+        return 0
+    start_scrims_watcher()
     return 0
 
 
 def cmd_stop():
     import ctypes
     import ctypes.wintypes as w
+    stop_scrims_watcher()
     pid = server_pid()
     if not pid:
         print(c("d", "  server not running"))
@@ -888,6 +1054,9 @@ def main():
                             a[2] if len(a) > 2 else None)
     if cmd == "rescue":
         return cmd_rescue(a[1] if len(a) > 1 else None)
+    if cmd == "sync-rotation":
+        # None (nothing to do, lineup finished) is not a failure.
+        return 1 if sync_scrims_rotation() is False else 0
     if cmd == "score-report": return cmd_score_report()
     if cmd == "score-log":
         return cmd_score_log(a[1] if len(a) > 1 else 120)

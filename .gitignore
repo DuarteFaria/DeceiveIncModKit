@@ -1,0 +1,18 @@
+# Secrets and local operator config. .env.example is committed; .env is not.
+.env
+
+# Player name -> roster name/discord id overrides for the scrims push.
+# Local operator data, not repo content.
+scrims-aliases.json
+
+# Match reports whose push failed, awaiting `scrims_push.py --flush`.
+.scrims-queue/
+
+# match_ids already pushed, so --watch cannot double-send. Local run state.
+.scrims-pushed.json
+
+# pid of the watcher started by `dimod launch`, removed by `dimod stop`.
+.scrims-watcher.pid
+
+__pycache__/
+*.pyc
