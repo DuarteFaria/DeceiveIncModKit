@@ -13,7 +13,6 @@ The kit is the source of truth. Nothing is authored inside the game folder;
   python dimod.py stop                stop the server
   python dimod.py restart <profile>   stop, apply, launch
   python dimod.py logs [n]            tail the UE4SS log
-  python dimod.py trigger-stage1      one-shot explicit freecam reproduction
   python dimod.py trigger-stage2      toggle the natural-death spectator route
   python dimod.py arm-stage2-spectator
                                       make the next connection a spectator
@@ -322,8 +321,7 @@ def cmd_apply(name):
 
     # One-shot native/Lua markers must never survive a restart or profile
     # switch. They are re-created only by explicit commands/login hooks.
-    for transient in ("DINativeSpectator.stage1-trigger",
-                      "DINativeSpectator.stage2-trigger",
+    for transient in ("DINativeSpectator.stage2-trigger",
                       "DINativeSpectator.next-dedicated",
                       "DINativeSpectator.readiness-override",
                       "DINativeSpectator.force-death",
@@ -489,8 +487,7 @@ def cmd_launch(mode=None):
     profile = profiles().get(active, {})
     native_modules = profile.get("native_modules", [])
     launch_env = os.environ.copy()
-    if any(m in ("DINativeSpectatorStage1", "DINativeSpectatorStage2",
-                 "DINativeSpectatorStage3")
+    if any(m in ("DINativeSpectatorStage2", "DINativeSpectatorStage3")
            for m in native_modules):
         launch_env["DIMOD_POST_INJECT_WAIT"] = "0.25"
     r = subprocess.run([exe, inject, "--launch"], capture_output=True, text=True,
@@ -504,8 +501,7 @@ def cmd_launch(mode=None):
 
     # Native DLLs are opt-in and profile-gated. Ordinary profiles have no
     # native_modules key, so the native loader is never invoked for them.
-    if any(m in ("DINativeSpectator", "DINativeSpectatorStage1",
-                 "DINativeSpectatorStage2", "DINativeSpectatorStage3")
+    if any(m in ("DINativeSpectatorStage2", "DINativeSpectatorStage3")
            for m in native_modules):
         loader = os.path.join(KIT, "tools", "load_native_spectator.py")
         native = subprocess.run([exe, loader], capture_output=True, text=True)
@@ -544,26 +540,6 @@ def cmd_logs(n=40):
     lines = open(UE4SS_LOG, encoding="utf-8", errors="replace").read().splitlines()
     for l in lines[-int(n):]:
         print("  " + l)
-
-
-def cmd_trigger_stage1():
-    if load_state().get("profile") != "native-spectator-stage2":
-        print(c("r", "  refused: native-spectator-stage2 is not active"))
-        return 1
-    pid = server_pid()
-    if not pid:
-        print(c("r", "  refused: dedicated server is not running"))
-        return 1
-    marker = os.path.join(WIN64, "DINativeSpectator.stage1-trigger")
-    # CREATE_NEW semantics: never queue or duplicate a trigger.
-    try:
-        with open(marker, "x", encoding="ascii") as f:
-            f.write("TRIGGER\n")
-    except FileExistsError:
-        print(c("r", "  refused: a Stage 1 trigger is already pending"))
-        return 1
-    print(c("y", f"  Stage 1 one-shot trigger armed for dedicated server pid {pid}"))
-    return 0
 
 
 def cmd_trigger_stage2(mode=None):
@@ -892,7 +868,6 @@ def main():
             if cmd_apply(a[1]): return 1
         return cmd_launch()
     if cmd == "logs":    return cmd_logs(a[1] if len(a) > 1 else 40)
-    if cmd == "trigger-stage1": return cmd_trigger_stage1()
     if cmd == "trigger-stage2":
         return cmd_trigger_stage2(a[1] if len(a) > 1 else None)
     if cmd == "arm-stage2-spectator": return cmd_arm_stage2_spectator()
