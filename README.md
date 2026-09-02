@@ -9,6 +9,45 @@ directory; `dimod.py apply` deploys into it, `dimod.py vanilla` takes it back ou
 
 ---
 
+## First run on a new machine
+
+```bash
+python dimod.py doctor
+```
+
+That is the whole setup check. It reports the game path and how it was found,
+whether the server executable and UE4SS are present, whether the mod can
+actually write its logs, which profile is deployed, and — for a scoring profile
+— whether the scrims API answers. Exit status is non-zero only for problems that
+will stop the kit working, so it is safe to script.
+
+**The game path is detected, not configured.** The kit reads Steam's own
+library list, so a server on `D:` is found without being told. If detection
+fails, either is enough:
+
+```bash
+set DI_SERVER_PATH=D:\SteamLibrary\steamapps\common\Deceive Inc. Dedicated Server
+```
+
+or copy `config.json.example` to `config.json` and set `server_path`. Use
+forward slashes there — a lone backslash is not legal JSON. `python dipaths.py`
+prints what was resolved and from which source.
+
+A path that exists but has no server executable in it is ignored rather than
+trusted, and `doctor` names it, so a stale setting cannot half-work.
+
+**Requirements:** Windows (the dedicated server and UE4SS are Windows-only),
+Python 3.9+, and UE4SS installed into the server's `Win64` folder — see
+[docs/04-ue4ss.md](docs/04-ue4ss.md).
+
+**Write access matters.** The mods write their logs and reports next to the
+server executable, under `Program Files` on a default install. Without write
+permission there, Windows redirects the writes to a per-user `VirtualStore` and
+the scrims watcher looks for a report that is not there. `doctor` probes this
+directly rather than assuming.
+
+---
+
 ## Quick start — GUI
 
 Double-click **`Mod Kit.bat`**, or:

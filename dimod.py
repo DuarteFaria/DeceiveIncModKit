@@ -5,6 +5,7 @@ dimod - Deceive Inc. dedicated-server mod manager.
 The kit is the source of truth. Nothing is authored inside the game folder;
 `apply` deploys into it and `vanilla` takes it all back out again.
 
+  python dimod.py doctor [--offline]  check this machine can run the kit
   python dimod.py status              what is deployed / running right now
   python dimod.py list                available mods and profiles
   python dimod.py apply <profile>     deploy a profile into the game folder
@@ -46,8 +47,15 @@ watch mode, so every finished match is scored and pushed with no further input;
 """
 import glob, json, os, re, shutil, subprocess, sys, time
 
+import dipaths
+
 KIT = os.path.dirname(os.path.abspath(__file__))
-SERVER = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server"
+# Resolved, not hardcoded - see dipaths.py. When the server cannot be found,
+# SERVER is a sentinel path inside the kit rather than "", so every derived
+# os.path.join stays absolute and a missing game can never turn into a write
+# next to the current directory. Commands that touch the game call
+# require_server() first.
+SERVER = dipaths.SERVER
 WIN64 = os.path.join(SERVER, r"DeceiveInc\Binaries\Win64")
 EXE = os.path.join(WIN64, "DeceiveIncServer-Win64-Shipping.exe")
 GAME_MODS = os.path.join(WIN64, "Mods")
@@ -274,6 +282,21 @@ def reset_profile_gameplay_keys():
 
 
 # ---------------------------------------------------------------- commands
+
+def require_server():
+    """Refuse, with instructions, when the game was not found.
+
+    Called by every command that reads or writes the game folder. Without it
+    those commands would operate on dipaths' sentinel path and report a
+    confusing absence of files instead of the actual problem."""
+    if dipaths.FOUND:
+        return True
+    print()
+    print(c("r", dipaths.explain(dipaths.RESOLUTION)))
+    print()
+    print(c("d", "  `python dimod.py doctor` checks everything else too.\n"))
+    return False
+
 
 def cmd_status():
     print(c("b", "\n  Deceive Inc. mod kit\n"))
@@ -978,6 +1001,223 @@ def cmd_rescue(target=None):
         print(c("r", "  refused: a rescue is already pending"))
         return 1
     print(c("y", f"  rescue requested on pid {pid}"))
+
+# ------------------------------------------------------------------ doctor
+#
+# One command that says why the kit will not work here. Every check reports
+# rather than raises, so a broken install still produces the full picture
+# instead of stopping at the first fault.
+
+MIN_PYTHON = (3, 9)
+
+
+class Check:
+    """A single finding. `fix` is the line the operator should act on."""
+
+    def __init__(self, level, label, detail="", fix=""):
+        self.level, self.label, self.detail, self.fix = level, label, detail, fix
+
+
+def _ok(label, detail=""):   return Check("ok", label, detail)
+def _warn(label, d="", f=""): return Check("warn", label, d, f)
+def _fail(label, d="", f=""): return Check("fail", label, d, f)
+
+
+def check_platform():
+    if sys.platform != "win32":
+        return [_fail("platform", f"{sys.platform}, but the dedicated server "
+                                  f"and UE4SS are Windows-only",
+                      "run the kit on Windows")]
+    out = [_ok("platform", sys.platform)]
+    v = sys.version_info
+    ver = f"{v.major}.{v.minor}.{v.micro}"
+    if (v.major, v.minor) < MIN_PYTHON:
+        out.append(_fail("python", f"{ver}, need >= "
+                                   f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"))
+    else:
+        out.append(_ok("python", ver))
+    return out
+
+
+def check_server():
+    res = dipaths.RESOLUTION
+    if not res:
+        return [_fail("server path", "not found",
+                      f"set {dipaths.ENV_VAR}, or put server_path in "
+                      f"config.json - `python dipaths.py` explains")]
+    out = [_ok("server path", SERVER), _ok("  found via", res.how)]
+    # A source that was set but wrong is worth naming even on success: it is
+    # almost always a typo the operator meant to take effect.
+    for label, path, why in res.tried:
+        if path and why == "no server executable there":
+            out.append(_warn(f"  {label}", f"ignored - {why}  [{path}]",
+                             "correct or remove it; a live setting that does "
+                             "nothing is worse than none"))
+        elif path is None and why not in ("not set", "no match"):
+            # A source that errored. Autodetection may have covered for it,
+            # but a config file that does nothing has to be reported.
+            out.append(_warn(f"  {label}", why, "fix or delete it"))
+    out.append(_ok("  executable", os.path.basename(EXE))
+               if os.path.isfile(EXE) else
+               _fail("  executable", "missing", "verify integrity in Steam"))
+    return out
+
+
+def check_writable():
+    """The one that bites on a machine other than the author's.
+
+    The mod writes DIScore.log / .report.json next to the server executable,
+    which lives under Program Files. Without write access Windows either
+    refuses or silently redirects to a per-user VirtualStore, where the watcher
+    then looks for a report that is not there."""
+    if not os.path.isdir(WIN64):
+        return [_fail("Win64 writable", "directory does not exist")]
+    probe = os.path.join(WIN64, ".dimod-write-probe")
+    try:
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("probe")
+        os.remove(probe)
+        return [_ok("Win64 writable", "mod reports and logs can be written")]
+    except PermissionError:
+        return [_fail("Win64 writable", "permission denied",
+                      "run the shell as Administrator, or grant your user "
+                      "write access to the Win64 folder - the mod cannot "
+                      "write its report without it")]
+    except OSError as e:
+        return [_fail("Win64 writable", f"{type(e).__name__}: {e}")]
+
+
+def check_ue4ss():
+    if not ue4ss_installed():
+        return [_fail("UE4SS", "ue4ss.dll not in Win64",
+                      "install UE4SS into the server's Win64 folder - "
+                      "see docs/04-ue4ss.md")]
+    out = [_ok("UE4SS", "installed")]
+    inject = os.path.join(KIT, "tools", "inject.py")
+    out.append(_ok("  tools/inject.py", "present") if os.path.isfile(inject)
+               else _fail("  tools/inject.py", "missing - launch cannot inject"))
+    return out
+
+
+def check_baseline():
+    orig = os.path.join(BASELINE, "TripwireServer.ini.original")
+    if not os.path.isfile(orig):
+        return [_fail("baseline config", "TripwireServer.ini.original missing",
+                      "apply cannot reset profile-owned keys to stock, so one "
+                      "profile's settings will leak into the next")]
+    have = set(read_ini_values(orig))
+    missing = sorted(MANAGED_TRIPWIRE_KEYS - have)
+    if missing:
+        return [_warn("baseline config", f"no stock value for {missing}",
+                      "those keys are removed on apply rather than reset")]
+    return [_ok("baseline config", f"{len(have)} stock keys")]
+
+
+def check_profile():
+    st = load_state()
+    active = st.get("profile")
+    if not active:
+        return [_warn("profile", "none applied", "python dimod.py apply <profile>")]
+    if active not in profiles():
+        return [_fail("profile", f"{active!r} is deployed but no longer exists",
+                      "apply a profile that exists")]
+    out = [_ok("profile", f"{active}  (applied {st.get('applied_at', '?')})")]
+    entries, _ = read_mods_txt()
+    emap = dict(entries)
+    wanted = [m for m, on in (profiles()[active].get("mods") or {}).items() if on]
+    for m in wanted:
+        if not os.path.isdir(os.path.join(GAME_MODS, m)):
+            out.append(_fail(f"  mod {m}", "not deployed", "re-run apply"))
+        elif not emap.get(m, False):
+            out.append(_warn(f"  mod {m}", "deployed but disabled in mods.txt"))
+        else:
+            out.append(_ok(f"  mod {m}", "deployed and enabled"))
+    return out
+
+
+def check_scrims(net=True):
+    """Only meaningful for a profile that pushes scores."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return [_ok("scrims", "not a scoring profile - skipped")]
+
+    env = os.path.join(KIT, ".env")
+    if not os.path.isfile(env):
+        return [_fail("scrims .env", "missing",
+                      "copy .env.example to .env and fill it in")]
+
+    values = {}
+    try:
+        for line in open(env, encoding="utf-8-sig"):
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            values[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError as e:
+        return [_fail("scrims .env", f"unreadable: {e}")]
+
+    out = [_ok("scrims .env", "present")]
+    for key in ("SCRIMS_API_KEY", "SCRIMS_BASE_URL", "SCRIMS_LOBBY_ID"):
+        out.append(_ok(f"  {key}", "set") if values.get(key)
+                   else _fail(f"  {key}", "empty or absent"))
+    if any(ch.level == "fail" for ch in out):
+        return out
+    if not net:
+        out.append(_ok("  API", "not checked (--offline)"))
+        return out
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    r = subprocess.run([python_exe(), pusher, "--print-rotation"],
+                       capture_output=True, text=True, cwd=KIT)
+    if r.returncode == 0:
+        out.append(_ok("  API", "reachable; rotation resolves"))
+    elif r.returncode == EXIT_LINEUP_DONE:
+        out.append(_warn("  API", "reachable, but every lineup map is scored",
+                         "start a new lobby, or --full-rotation to replay"))
+    else:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()
+        out.append(_fail("  API", tail[-1].strip() if tail else
+                                  f"exit {r.returncode}",
+                         "check SCRIMS_BASE_URL, the key, and the lobby id"))
+    return out
+
+
+def cmd_doctor(offline=False):
+    print(c("b", "\n  dimod doctor\n"))
+    groups = [
+        ("environment", check_platform()),
+        ("game", check_server() + check_writable()),
+        ("modding", check_ue4ss() + check_baseline()),
+        ("deployment", check_profile()),
+        ("scoring", check_scrims(net=not offline)),
+    ]
+
+    fails = warns = 0
+    for title, checks in groups:
+        print(c("b", f"  {title}"))
+        for ch in checks:
+            if ch.level == "ok":
+                mark, colour = "ok  ", "g"
+            elif ch.level == "warn":
+                mark, colour, warns = "warn", "y", warns + 1
+            else:
+                mark, colour, fails = "FAIL", "r", fails + 1
+            print(f"    {c(colour, mark)}  {ch.label:<22} {c('d', ch.detail)}")
+            if ch.fix and ch.level != "ok":
+                print(f"          {c('d', '-> ' + ch.fix)}")
+        print()
+
+    if fails:
+        print(c("r", f"  {fails} problem(s) will stop the kit working here")
+              + (c("y", f", {warns} warning(s)") if warns else "") + "\n")
+        return 1
+    if warns:
+        print(c("y", f"  no blockers, {warns} warning(s)\n"))
+        return 0
+    print(c("g", "  all checks passed\n"))
+    return 0
+
 def cmd_score_report():
     """Ask DIScore for an immediate mid-match report instead of waiting for
     MatchResultsPosted. The mod polls for the marker every 2s."""
@@ -1020,6 +1260,17 @@ def main():
         print(__doc__)
         return 0
     cmd = a[0]
+
+    # Commands that neither read nor write the game folder. Everything else is
+    # gated here rather than in fifteen separate functions: without the game,
+    # they would operate on dipaths' sentinel path and report a puzzling
+    # absence of files instead of the real problem.
+    KIT_ONLY = ("doctor", "list")
+    if cmd not in KIT_ONLY and not require_server():
+        return 1
+
+    if cmd == "doctor":
+        return cmd_doctor(offline="--offline" in a[1:])
     if cmd == "status":  return cmd_status()
     if cmd == "list":    return cmd_list()
     if cmd == "apply":

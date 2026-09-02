@@ -28,6 +28,12 @@ import argparse, json, os, sys, time, unicodedata, urllib.error, urllib.request
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# The kit root holds dipaths.py, and this script is run as tools/scrims_push.py
+# rather than as part of a package.
+if KIT not in sys.path:
+    sys.path.insert(0, KIT)
+import dipaths
+
 # Distinct from 1 (failure): the lineup is finished, which is a normal end
 # state, not an error. Callers should leave the rotation alone, not warn.
 EXIT_LINEUP_DONE = 3
@@ -57,8 +63,10 @@ def load_dotenv(path=None):
 # Before anything reads os.environ, so argparse defaults see .env values.
 load_dotenv()
 
-SERVER = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server"
-WIN64 = os.path.join(SERVER, r"DeceiveInc\Binaries\Win64")
+# Resolved by the kit's shared resolver, so the pusher and dimod can never
+# disagree about where the server is. KIT is on sys.path above for this.
+SERVER = dipaths.SERVER
+WIN64 = dipaths.WIN64
 REPORT = os.path.join(WIN64, "DIScore.report.json")
 
 # Failed pushes land here rather than being lost. A site outage should never

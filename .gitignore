@@ -1,5 +1,7 @@
-# Secrets and local operator config. .env.example is committed; .env is not.
+# Secrets and local operator config. The .example files are committed; these
+# are not - they hold machine-specific paths and credentials.
 .env
+config.json
 
 # Player name -> roster name/discord id overrides for the scrims push.
 # Local operator data, not repo content.

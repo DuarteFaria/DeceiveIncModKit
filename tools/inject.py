@@ -5,8 +5,18 @@ Usage:
 """
 import ctypes, ctypes.wintypes as w, sys, time, os, subprocess
 
-EXE = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server\DeceiveInc\Binaries\Win64\DeceiveIncServer-Win64-Shipping.exe"
-DLL = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server\DeceiveInc\Binaries\Win64\ue4ss.dll"
+# The kit root holds dipaths.py; this runs as tools/inject.py, not as a package.
+KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if KIT not in sys.path:
+    sys.path.insert(0, KIT)
+import dipaths
+
+EXE = dipaths.EXE
+DLL = os.path.join(dipaths.WIN64, "ue4ss.dll")
+
+if not dipaths.FOUND:
+    # dimod gates on this before launching, but inject.py is also run by hand.
+    raise SystemExit(dipaths.explain(dipaths.RESOLUTION))
 
 k32 = ctypes.WinDLL('kernel32', use_last_error=True)
 psapi = ctypes.WinDLL('psapi', use_last_error=True)
