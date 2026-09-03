@@ -63,11 +63,13 @@ MODS_TXT = os.path.join(GAME_MODS, "mods.txt")
 DICONFIG = os.path.join(WIN64, "DIConfig.ini")
 UE4SS_LOG = os.path.join(WIN64, "UE4SS.log")
 TRIPWIRE = os.path.join(SERVER, r"DeceiveInc\Saved\Config\WindowsServer\TripwireServer.ini")
+BALANCE_PROFILE = os.path.join(SERVER, "DeceiveInc", "CommunityBalanceProfile.json")
 
 KIT_MODS = os.path.join(KIT, "mods")
 PROFILES = os.path.join(KIT, "profiles")
 BASELINE = os.path.join(KIT, "baseline")
 STATE = os.path.join(KIT, ".deployed.json")
+ENV = os.path.join(KIT, ".env")
 
 # Keys owned by profiles. Applying a profile resets these to the stock baseline
 # before applying its overrides, preventing values from a previous profile from
@@ -84,6 +86,32 @@ MANAGED_TRIPWIRE_KEYS = {
 # UE4SS's own bundled mods - left alone by vanilla, they came with the zip
 STOCK_MODS = ["CheatManagerEnablerMod", "ActorDumperMod", "ConsoleCommandsMod",
               "ConsoleEnablerMod", "SplitScreenMod", "LineTraceMod", "Keybinds"]
+
+# Presentation metadata shared by the CLI and GUI.  Deployment behaviour still
+# comes exclusively from profile JSON; this only explains the folders returned
+# by our_mods().
+MOD_INFO = {
+    "DIConfig": {
+        "description": "timing and spectator overrides via DIConfig.ini",
+        "experimental": False,
+    },
+    "DIExtraction": {
+        "description": "carrier-extraction match mode",
+        "experimental": False,
+    },
+    "DIScore": {
+        "description": "ranked multiplayer scoring and scrims push",
+        "experimental": False,
+    },
+    "DINativeLifecycle": {
+        "description": "Stage 1 read-only lifecycle and spectator-RPC tracing",
+        "experimental": True,
+    },
+    "DINativeStage2": {
+        "description": "faction-210 login, pregame advance, and spectator accounting",
+        "experimental": True,
+    },
+}
 
 C = {"g": "\033[32m", "y": "\033[33m", "r": "\033[31m", "b": "\033[1m", "d": "\033[2m", "x": "\033[0m"}
 def c(k, s): return f"{C[k]}{s}{C['x']}"
@@ -110,6 +138,22 @@ def profiles():
             except Exception as e:
                 print(c("r", f"  ! {f}: {e}"))
     return out
+
+
+def profile_path(name):
+    """Return the JSON path for a profile name, without allowing traversal."""
+    if not isinstance(name, str) or not name or os.path.basename(name) != name:
+        raise ValueError(f"invalid profile name: {name!r}")
+    return os.path.join(PROFILES, name + ".json")
+
+
+def save_profile(name, data):
+    """Write one profile in the repository's stable, reviewable JSON format."""
+    path = profile_path(name)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+    return path
 
 
 def load_state():
@@ -284,6 +328,121 @@ def reset_profile_gameplay_keys():
         set_ini_keys(TRIPWIRE, stock)
 
 
+# ------------------------------------------------- machine-local settings
+#
+# Two things the GUI can edit that are deliberately NOT profile data: the
+# server's join password and the scrims lobby id. Both belong to this machine,
+# not to a profile - the password is an identity key that survives profile
+# switches (see MANAGED_TRIPWIRE_KEYS), and the lobby id lives in the
+# gitignored .env. Profiles are tracked, so neither may ever be written into
+# one.
+
+def read_env(key, path=None):
+    """One value from the kit's .env, read fresh from disk, or "".
+
+    Deliberately not os.environ: a long-lived GUI froze its environment at
+    startup, and the file is what tools/scrims_push.py actually reads."""
+    try:
+        with open(path or ENV, encoding="utf-8-sig") as f:
+            lines = f.readlines()
+    except OSError:
+        return ""
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() == key:
+            value = value.strip()
+            if len(value) > 1 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            return value
+    return ""
+
+
+def write_env(key, value, path=None):
+    """Set one key in .env, leaving every other line exactly as it was.
+
+    Line-wise rather than parse-and-rewrite on purpose: the file holds the API
+    key and explanatory comments, and a round trip through a dict would drop
+    the comments and risk mangling a value this function was never asked to
+    touch."""
+    path = path or ENV
+    value = str(value).strip()
+    if any(ch in value for ch in "\r\n"):
+        raise ValueError(f"{key} cannot contain a line break")
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        # A missing .env is a half-set-up kit, not an error: write the key and
+        # point at the example so the rest can be filled in.
+        lines = [f"# Created by the mod kit. See .env.example for the full set.",
+                 ""]
+    out, written = [], False
+    for line in lines:
+        stripped = line.strip()
+        name = stripped.partition("=")[0].strip() if "=" in stripped else None
+        if name == key and not stripped.startswith("#"):
+            if not written:
+                out.append(f"{key}={value}")
+                written = True
+            continue
+        out.append(line)
+    if not written:
+        out.append(f"{key}={value}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+    return path
+
+
+def scrims_lobby():
+    return read_env("SCRIMS_LOBBY_ID")
+
+
+def set_scrims_lobby(value):
+    """Point the kit at a different scrims lobby.
+
+    A running watcher compares .env against the id it started with on every
+    tick and stops rather than push a scrim's scores to the previous lobby, so
+    changing this mid-run means restarting the server."""
+    write_env("SCRIMS_LOBBY_ID", value)
+    print(f"  .env: SCRIMS_LOBBY_ID={value or '(blank)'}")
+    if watcher_pid():
+        print(c("y", "  ! a scrims watcher is running and will stop on its next "
+                     "tick"))
+        print(c("d", "    restart the server so it picks up the new lobby."))
+
+
+def server_password():
+    return read_ini_values(TRIPWIRE).get("Password", "")
+
+
+def set_server_password(value):
+    """Set or clear the join password in TripwireServer.ini.
+
+    Not profile data: Password is an identity key like ServerName and ports, so
+    it is not in MANAGED_TRIPWIRE_KEYS and survives every profile switch. It
+    also must not reach a profile JSON, because those are tracked in git."""
+    value = str(value).strip()
+    if value:
+        set_ini_keys(TRIPWIRE, {"Password": value})
+        print("  TripwireServer.ini: Password set")
+    else:
+        remove_ini_keys(TRIPWIRE, ["Password"])
+        print("  TripwireServer.ini: Password removed - anyone can join")
+
+
+def scrims_env_state():
+    """-> (.env exists, [names of settings that are still missing]).
+
+    Presence only. The API key's value must never reach a window or a log."""
+    if not os.path.isfile(ENV):
+        return False, ["SCRIMS_API_KEY", "SCRIMS_BASE_URL", "SCRIMS_LOBBY_ID"]
+    return True, [name for name in
+                  ("SCRIMS_API_KEY", "SCRIMS_BASE_URL", "SCRIMS_LOBBY_ID")
+                  if not read_env(name)]
+
 # ---------------------------------------------------------------- commands
 
 def require_server():
@@ -421,11 +580,24 @@ def cmd_apply(name):
     # TripwireServer.ini. Reset our complete gameplay surface first so profile
     # switches are deterministic while ServerName/Password/ports survive.
     reset_profile_gameplay_keys()
-    tw = p.get("tripwire")
+    tw = p.get("tripwire") or {}
     if tw:
         set_ini_keys(TRIPWIRE, tw)
-        print(f"  TripwireServer.ini: " + ", ".join(f"{k}={v}" for k, v in tw.items()))
+        # A list is written as repeated keys, so show it as an order rather
+        # than as a Python repr or a comma list - the latter is the exact
+        # syntax that does NOT work, and the log should not suggest it.
+        def shown(v):
+            return " -> ".join(str(i) for i in v) if isinstance(v, (list, tuple)) else v
+        print(f"  TripwireServer.ini: "
+              + ", ".join(f"{k}={shown(v)}" for k, v in tw.items()))
     for k in p.get("tripwire_remove", []):
+        # Setting a key is the more specific instruction, so it beats a blanket
+        # remove. tripwire_remove runs last, so without this a profile holding
+        # both silently deletes the value it just wrote - which is exactly what
+        # happened to vanilla's MapRotation once the GUI could edit it.
+        if k in tw:
+            print(c("y", f"  ! tripwire_remove ignores {k}: this profile sets it"))
+            continue
         remove_ini_keys(TRIPWIRE, [k])
         print(f"  TripwireServer.ini: removed {k}")
 
@@ -538,12 +710,21 @@ def sync_scrims_rotation():
     active = load_state().get("profile")
     if not profiles().get(active, {}).get("scrims_watch"):
         return None
-    if not os.path.isfile(os.path.join(KIT, ".env")):
-        return None
+
+    # Past this point the profile has ASKED for scrims, so a skip is a
+    # misconfiguration and must say so. These two returned silently until
+    # 2026-09-03, and a missing .env then looked exactly like a server that
+    # ignores its rotation: nothing synced, nothing said, default map pool.
+    if not os.path.isfile(ENV):
+        print(c("y", "\n  ! rotation NOT synced: no .env in the kit root"))
+        print(c("d", "    copy .env.example to .env and fill it in, or turn "
+                     "scrims_watch off for this profile."))
+        return False
 
     pusher = os.path.join(KIT, "tools", "scrims_push.py")
     if not os.path.isfile(pusher):
-        return None
+        print(c("y", "\n  ! rotation NOT synced: tools/scrims_push.py is missing"))
+        return False
 
     print(c("b", "\n  syncing map rotation to the lobby lineup"))
     r = subprocess.run([python_exe(), pusher, "--print-rotation"],
@@ -635,7 +816,7 @@ def start_scrims_watcher():
     active = load_state().get("profile")
     if not profiles().get(active, {}).get("scrims_watch"):
         return
-    if not os.path.isfile(os.path.join(KIT, ".env")):
+    if not os.path.isfile(ENV):
         print(c("y", "  scrims watcher not started: no .env "
                      "(copy .env.example and fill it in)"))
         return
@@ -1196,7 +1377,7 @@ def check_scrims(net=True):
     if not profiles().get(active, {}).get("scrims_watch"):
         return [_ok("scrims", "not a scoring profile - skipped")]
 
-    env = os.path.join(KIT, ".env")
+    env = ENV
     if not os.path.isfile(env):
         return [_fail("scrims .env", "missing",
                       "copy .env.example to .env and fill it in")]

@@ -6,7 +6,7 @@
   },
   "diconfig": {
     "Timing": {
-      "LobbyWaitTime": 15,
+      "LobbyWaitTime": 10,
       "IntroPhaseTime": 5
     }
   },
@@ -14,7 +14,12 @@
     "GameMode": "Solo",
     "MaxPlayers": "8",
     "BotsAmount": "7",
-    "bIsPublic": "False"
+    "bIsPublic": "False",
+    "ServerName": "ScrimsTesting",
+    "BotsDifficulty": "Difficult",
+    "bSandboxMode": "True",
+    "bEnableUPnP": "True",
+    "AutoShutdownEmptyMinutes": "10"
   },
   "scrims_watch": true
 }

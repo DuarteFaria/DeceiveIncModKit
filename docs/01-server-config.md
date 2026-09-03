@@ -73,6 +73,13 @@ The earlier confirmed example (`MapRotation=Tutorial`) was a single entry, which
 is why the mistake went unnoticed — one element parses fine either way.
 `dimod.set_ini_keys` now writes a list value as repeated keys for this reason.
 
+The other way a rotation goes missing is kit-side, not server-side: a profile
+that names a key in both `tripwire` and `tripwire_remove` used to write the
+value and then delete it, because `apply` processes the removals last. Setting
+now wins and `apply` prints `! tripwire_remove ignores <key>`. If a rotation is
+being ignored, check the `MapRotation=` lines in the ini before suspecting the
+server — absent is a different fault from unparseable.
+
 ## Network
 
 | Key | Notes |

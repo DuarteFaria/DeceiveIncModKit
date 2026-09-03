@@ -1,11 +1,26 @@
 {
   "description": "Stock gameplay. All custom mods off, normal map rotation.",
-  "mods": {},
-  "diconfig": {},
-  "tripwire": {
-    "bIsPublic": "True"
+  "mods": {
+    "DIConfig": true
   },
-  "tripwire_remove": [
-    "MapRotation"
-  ]
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 10,
+      "IntroPhaseTime": 5
+    }
+  },
+  "tripwire": {
+    "bIsPublic": "True",
+    "MapRotation": [
+      "TrainingRange"
+    ],
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "BotsDifficulty": "Difficult",
+    "bFillWithBots": "True",
+    "bSandboxMode": "True",
+    "bEnableUPnP": "True",
+    "AutoShutdownEmptyMinutes": "10"
+  }
 }
