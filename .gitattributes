@@ -1,0 +1,26 @@
+# Line-ending policy. Without this the repo held a mixture: 40 files CRLF, 7
+# LF, and two - tools/scrims_push.py and profiles/vanilla.json - mixed inside a
+# single file, which is what produced git's recurring "LF will be replaced by
+# CRLF" warnings.
+#
+# text=auto stores text as LF in the repo and converts on checkout according to
+# the local core.autocrlf, so Windows working copies still get CRLF.
+* text=auto
+
+# Windows-only artefacts, pinned to CRLF wherever they are checked out rather
+# than left to the local setting.
+
+# cmd.exe is the one consumer that can genuinely misbehave on LF, around labels
+# and goto.
+*.bat text eol=crlf
+
+# Copied verbatim into the game's config directory by `dimod apply`, so it is
+# read by Unreal as a Windows INI rather than by anything in this repo.
+*.ini text eol=crlf
+baseline/TripwireServer.ini.original text eol=crlf
+
+# The opposite case: sha256sum -c cannot read a CRLF manifest - the carriage
+# return lands on the filename and the open fails - which is why
+# tools/verify_baseline.py exists. Pinning these to LF makes the standard tool
+# work too. See docs/09-native-stage0.md.
+*.sha256 text eol=lf
