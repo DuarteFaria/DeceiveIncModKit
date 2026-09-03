@@ -3,6 +3,13 @@
 .env
 config.json
 
+# Which profile is deployed on THIS machine and when. Pure local run
+# state, rewritten by every `apply`, so tracking it means a pointless
+# diff after each one and a conflict whenever two machines disagree.
+# Its absence is handled: load_state() returns {} and status reports
+# "(none / vanilla)".
+.deployed.json
+
 # Player name -> roster name/discord id overrides for the scrims push.
 # Local operator data, not repo content.
 scrims-aliases.json
