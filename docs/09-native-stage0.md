@@ -37,8 +37,11 @@ check them against the manifest:
 python tools/verify_baseline.py
 ```
 
-(Not `sha256sum -c` - these manifests are CRLF, which leaves a stray carriage
-return on the filename and fails to open it.)
+`sha256sum -c manifest.sha256` works too, from inside that directory. It did
+not until `.gitattributes` pinned `*.sha256` to LF: a CRLF manifest leaves a
+stray carriage return on the filename and the open fails, which is why the
+Python version exists. Prefer `verify_baseline.py` anyway - it says what a
+mismatch MEANS, and it reads a manifest with either line ending.
 
 A mismatch means the game updated, in which case the archive is stale and the
 Stage 3 offsets in it should not be trusted. To restore the executable without
