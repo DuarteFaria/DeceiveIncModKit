@@ -63,6 +63,7 @@ MODS_TXT = os.path.join(GAME_MODS, "mods.txt")
 DICONFIG = os.path.join(WIN64, "DIConfig.ini")
 UE4SS_LOG = os.path.join(WIN64, "UE4SS.log")
 TRIPWIRE = os.path.join(SERVER, r"DeceiveInc\Saved\Config\WindowsServer\TripwireServer.ini")
+BALANCE_PROFILE = os.path.join(SERVER, "DeceiveInc", "CommunityBalanceProfile.json")
 
 KIT_MODS = os.path.join(KIT, "mods")
 PROFILES = os.path.join(KIT, "profiles")
@@ -84,6 +85,32 @@ MANAGED_TRIPWIRE_KEYS = {
 # UE4SS's own bundled mods - left alone by vanilla, they came with the zip
 STOCK_MODS = ["CheatManagerEnablerMod", "ActorDumperMod", "ConsoleCommandsMod",
               "ConsoleEnablerMod", "SplitScreenMod", "LineTraceMod", "Keybinds"]
+
+# Presentation metadata shared by the CLI and GUI.  Deployment behaviour still
+# comes exclusively from profile JSON; this only explains the folders returned
+# by our_mods().
+MOD_INFO = {
+    "DIConfig": {
+        "description": "timing and spectator overrides via DIConfig.ini",
+        "experimental": False,
+    },
+    "DIExtraction": {
+        "description": "carrier-extraction match mode",
+        "experimental": False,
+    },
+    "DIScore": {
+        "description": "ranked multiplayer scoring and scrims push",
+        "experimental": False,
+    },
+    "DINativeLifecycle": {
+        "description": "Stage 1 read-only lifecycle and spectator-RPC tracing",
+        "experimental": True,
+    },
+    "DINativeStage2": {
+        "description": "faction-210 login, pregame advance, and spectator accounting",
+        "experimental": True,
+    },
+}
 
 C = {"g": "\033[32m", "y": "\033[33m", "r": "\033[31m", "b": "\033[1m", "d": "\033[2m", "x": "\033[0m"}
 def c(k, s): return f"{C[k]}{s}{C['x']}"
@@ -110,6 +137,22 @@ def profiles():
             except Exception as e:
                 print(c("r", f"  ! {f}: {e}"))
     return out
+
+
+def profile_path(name):
+    """Return the JSON path for a profile name, without allowing traversal."""
+    if not isinstance(name, str) or not name or os.path.basename(name) != name:
+        raise ValueError(f"invalid profile name: {name!r}")
+    return os.path.join(PROFILES, name + ".json")
+
+
+def save_profile(name, data):
+    """Write one profile in the repository's stable, reviewable JSON format."""
+    path = profile_path(name)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+    return path
 
 
 def load_state():

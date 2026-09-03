@@ -10,6 +10,9 @@ config.json
 # "(none / vanilla)".
 .deployed.json
 
+# Window size and position for the local GUI.
+.gui-state.json
+
 # Player name -> roster name/discord id overrides for the scrims push.
 # Local operator data, not repo content.
 scrims-aliases.json
