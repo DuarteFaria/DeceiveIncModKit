@@ -1,8 +1,8 @@
-"""Profile field metadata and lossless draft handling for ``dimod_gui2``.
+"""Profile field metadata and lossless draft handling for ``dimod_gui``.
 
-This module deliberately contains no Tk code.  Phase 0 can therefore prove
-that opening and collecting every real profile is lossless without needing a
-display, while the GUI remains only a renderer for profile data.
+This module deliberately contains no Tk code, so the claim that opening and
+collecting every real profile is lossless can be tested without a display,
+and the GUI stays only a renderer for profile data.
 """
 from copy import deepcopy
 from dataclasses import dataclass
@@ -93,6 +93,66 @@ GROUPS = {
     "server": ("Server", "TripwireServer.ini settings owned by this profile"),
     "advanced": ("Advanced", "Less common profile keys"),
 }
+
+
+# Fields the form edits that are NOT profile data.  Both live on this machine
+# and must never reach a profile JSON, because profiles are tracked in git: the
+# join password is a TripwireServer.ini identity key that survives profile
+# switches, and the lobby id belongs to the gitignored .env.  They are kept out
+# of FIELDS so ProfileDraft cannot round-trip them into a profile by accident.
+MACHINE_FIELDS = (
+    Field("ini.Password", "Join password", "str", "server",
+          help="Blank means anyone can join. Saved to TripwireServer.ini on "
+               "this machine, not into the profile"),
+    Field("env.SCRIMS_LOBBY_ID", "Scrims lobby id", "str", "scoring",
+          needs_mod="DIScore",
+          help="From the lobby's URL on the scrims site. Saved to .env"),
+)
+
+
+def section_fields(group, extra=()):
+    """Every field shown under one section heading, profile and machine alike."""
+    return tuple(field for field in tuple(FIELDS) + tuple(extra) + MACHINE_FIELDS
+                 if field.group == group)
+
+
+class MachineDraft:
+    """Edit buffer for machine-local values, mirroring ProfileDraft's contract.
+
+    Deliberately dumb: these are single strings with no encoding to preserve,
+    so all this has to do is remember what was read and report what changed.
+    """
+
+    def __init__(self, values, fields=MACHINE_FIELDS):
+        self.fields = tuple(fields)
+        self.initial = {field.path: str(values.get(field.path, ""))
+                        for field in self.fields}
+        self.values = dict(self.initial)
+
+    def set(self, path, value):
+        self.values[path] = str(value)
+
+    def changes(self):
+        """-> {path: value} for the fields the user actually edited.
+
+        Only changed fields, so opening a profile and pressing Save never
+        rewrites a password or a lobby id that was already correct.
+        """
+        return {path: value for path, value in self.values.items()
+                if value != self.initial[path]}
+
+    def validation_errors(self):
+        errors = {}
+        for field in self.fields:
+            value = self.values[field.path]
+            if value != value.strip():
+                errors[field.path] = f"{field.label} cannot start or end with a space"
+            elif "\n" in value or "\r" in value:
+                errors[field.path] = f"{field.label} cannot contain a line break"
+        return errors
+
+    def dirty(self):
+        return bool(self.changes())
 
 
 def mod_fields(mod_names):

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Lossless profile-model checks for the Phase 0 GUI prototype."""
+"""Profile-model and window checks for dimod_gui."""
 import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -131,6 +132,37 @@ class ProfileDraftTests(unittest.TestCase):
         draft.set("tripwire.GameMode", "AnotherLegacyMode")
         _collected, errors = draft.collect()
         self.assertTrue(errors)
+
+
+class WindowTests(unittest.TestCase):
+    """The one check the profile model cannot make: that the window builds.
+
+    Every wiring mistake in the Tk layer - a button naming a method that no
+    longer exists, a refresh that runs before the widget it touches - shows
+    up here rather than only when somebody double-clicks Mod Kit.bat.
+    """
+
+    def test_window_builds_and_closes_in_dry_run(self):
+        try:
+            import tkinter as tk
+            tk.Tk().destroy()
+        except Exception as exc:                      # no display, or no Tk
+            self.skipTest(f"Tk is unavailable: {exc}")
+
+        import dimod_gui
+        app = dimod_gui.App(dry_run=True)
+        try:
+            app.withdraw()                            # do not steal focus
+            # Pumping until the startup doctor lands exercises the whole
+            # worker-thread-to-queue-to-drain path, not just the layout.
+            deadline = time.monotonic() + 15
+            while app.busy and time.monotonic() < deadline:
+                app.update()
+                time.sleep(0.02)
+            self.assertFalse(app.busy, "the startup doctor never finished")
+            self.assertTrue(app.dry_run)
+        finally:
+            app.destroy()
 
 
 if __name__ == "__main__":

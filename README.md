@@ -56,14 +56,36 @@ Double-click **`Mod Kit.bat`**, or:
 python dimod_gui.py
 ```
 
-Pick a profile on the left, tweak the timing spinboxes and mod checkboxes, then
-**Apply + Restart**. The right pane live-tails the UE4SS log, so you can watch
-`LobbyWaitTime: 90 -> 20 [ok]` scroll past as it applies. Status across the top
-shows whether the server is up, whether UE4SS is installed, and which profile is
-active.
+Pick a profile on the left and edit it on the **Setup** tab — description, mods,
+timing, the extraction and spectator options, and the `TripwireServer.ini` block
+the profile owns, each group appearing only when the mod that reads it is
+checked. **Save** writes the JSON; **Save & Deploy** saves, stops the server,
+applies the profile and starts it again. Nothing is written until you press one
+of those two: the form is a draft, a changed profile is marked `*` in the list,
+and **Revert** throws the draft away.
 
-Editing anything in the left panel and hitting Apply saves it back into the
-profile JSON — the kit stays the source of truth.
+Two fields on that tab are **not** profile data, because profiles are tracked in
+git and shared: the join password (Server group) goes straight to
+`TripwireServer.ini`, and the scrims lobby id (Scoring group) goes to `.env`.
+Both belong to this machine and survive profile switches. Save writes them along
+with the profile, and only when you actually changed them. Changing the lobby id
+while a scrims watcher is running stops that watcher — the window asks first.
+
+The **Run** tab holds the actions that only make sense mid-session — trigger an
+extraction, rescue a player, ask for a score report, sync the map rotation — each
+greyed with the reason until the profile that provides it is both deployed and
+running. Underneath them the doctor runs the same checks as `python dimod.py
+doctor`, so a broken install explains itself in the window.
+
+The status strip separates the profile you are *editing* from the one that is
+*deployed*, which is the distinction the CLI makes and the old window did not.
+The log pane at the bottom has three streams: kit command output, the live UE4SS
+`[Lua]` tail (watch `LobbyWaitTime: 90 -> 20 [ok]` scroll past as a profile
+applies), and `DIScore.log` when the profile is a scoring one. Click **LOGS**
+to collapse the pane to its toolbar when you want the form.
+
+`python dimod_gui.py --dry-run` opens the same window with every write and every
+start/stop replaced by a log line. It is the safe way to look around.
 
 ## Quick start — CLI
 
@@ -126,10 +148,21 @@ Profiles are plain JSON in `profiles/`. Copy one and edit:
   "description": "shown by dimod list",
   "mods":     { "DIConfig": true, "DIExtraction": false },
   "diconfig": { "Timing": { "LobbyWaitTime": 30 } },
-  "tripwire": { "MapRotation": "Tutorial", "bIsPublic": "False" },
-  "tripwire_remove": ["MapRotation"]
+  "tripwire": { "MapRotation": ["Hardsell", "Silverreef"], "bIsPublic": "False" },
+  "tripwire_remove": ["AutoShutdownEmptyMinutes"]
 }
 ```
+
+`MapRotation` must be a **list**, one entry per map, in play order. A
+comma-separated string is taken by the server as a single map name that matches
+nothing, and it falls back to its default pool.
+
+`tripwire_remove` deletes a key outright, for the rare case where the key's
+absence is not the same as any value it could hold. You rarely need it: applying
+a profile already resets every key in `MANAGED_TRIPWIRE_KEYS` to
+`baseline/TripwireServer.ini.original`, so a key the baseline does not carry is
+gone anyway. Listing a key in both blocks is a contradiction — `tripwire` wins
+and `apply` says so.
 
 ---
 

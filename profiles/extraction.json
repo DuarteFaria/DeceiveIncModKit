@@ -22,6 +22,10 @@
     "BotsAmount": "7",
     "bIsPublic": "True",
     "bEnableUPnP": "True",
-    "AutoShutdownEmptyMinutes": "60"
+    "AutoShutdownEmptyMinutes": "60",
+    "BotsDifficulty": "Difficult",
+    "MapRotation": [
+      "Hardsell_Day"
+    ]
   }
 }

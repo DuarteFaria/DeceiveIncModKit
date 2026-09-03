@@ -1,17 +1,24 @@
 # GUI revamp — decided spec and handoff notes
 
-Status: **Phase 0 accepted 2026-09-03.** `dimod_gui2.py` runs in dry-run
-with the two-tab layout, the schema form, hidden sections, live read-only
-doctor checks and live log tails; the section 11 review fixes are applied and
-`tools/test_gui2_profiles.py` passes (11 tests). This started as a menu of
-options; after mockups and a look at comparable tools it became a spec.
-Rejected options are kept in section 10 so nobody re-proposes them.
+Status: **Phase 1 done 2026-09-03.** The new window *is* `dimod_gui.py`: two
+tabs, schema form, live dispatcher on a worker thread, real Save / Save &
+Deploy / Start / Stop / Apply only / Restore stock, Run-tab operator actions,
+the full doctor and Duplicate. `python dimod_gui.py --dry-run` keeps the
+Phase 0 behaviour, logging every write and process action instead of running
+it. What Phase 1 actually built, and where it deviated from the work order,
+is section 13. Section 14 covers the machine-local settings added after it
+(join password, scrims lobby id) and the silent failure that prompted them;
+section 15 is the pre-commit review, including work that came from a
+second chat and one change of it that was reverted.
 
-**If you were asked to "do Phase 1" or "make the GUI live": go straight to
-section 12.** It is self-contained and ordered.
+This started as a menu of options; after mockups and a look at comparable
+tools it became a spec. Rejected options are kept in section 10 so nobody
+re-proposes them — one of them was partly reversed on request, and says so.
+**Phase 2 — drift detection and the first-run panel — is the only planned
+work left; see section 8.**
 
-Read first: `dimod_gui.py` (339 lines, the current GUI), `dimod.py` (the
-`cmd_*` functions and `MANAGED_TRIPWIRE_KEYS`), `profiles/*.json`.
+Read first: `dimod_gui.py`, `profile_schema.py`, `dimod.py` (the `cmd_*`
+functions and `MANAGED_TRIPWIRE_KEYS`), `profiles/*.json`.
 
 Ground rule that must survive the revamp: **all logic stays in `dimod.py`.**
 The GUI drives it and renders. If the GUI needs something `dimod.py` does not
@@ -295,6 +302,9 @@ contents only when a size or mtime changed.
   dim; `ERROR` / `error:` red; lines starting `!` yellow; `applied` /
   `[ok]` / `->` green. Keep the tag names `ok/warn/err/dim`.
 - `wrap="word"`. Cap each stream at 5 000 lines.
+- The whole pane collapses to its toolbar via the `LOGS` disclosure
+  button (added after Phase 1, section 15) and restores to the sash
+  position it had.
 
 ---
 
@@ -309,10 +319,10 @@ Phase 0 also added a **map rotation editor** (ordered list + randomize) for
 profiles without DIScore, with a note instead for scoring profiles where the
 scrims sync owns the rotation. Accepted; it stays.
 
-**Phase 1 — go live (section 12).** Wire the dispatcher to real dimod calls
-on a worker thread, real Save / Save & Deploy / Start / Stop / Apply only /
-Restore stock, the Run-tab operator actions, the full doctor, Duplicate,
-then replace `dimod_gui.py` with the new file.
+**Phase 1 — DONE 2026-09-03.** The work order is section 12; what was built
+and where it deviated is section 13. `dimod_gui2.py` became `dimod_gui.py`,
+the dispatcher runs real `dimod` calls on a worker thread, and `--dry-run`
+keeps the Phase 0 behaviour for testing.
 
 **Phase 2 — after living with it:** drift detection (section 6), first-run
 panel (section 5). Nothing else is planned.
@@ -357,7 +367,11 @@ panel (section 5). Nothing else is planned.
 - **Generic JSON walker form (D2 / D3 fallback).** Unknown keys are bugs here.
 - **Developer probes in the GUI.** `native-invoke`, `native-trace`, recon,
   stage2 arming, grant-loadout, disguise. CLI-only.
-- **Scrims tab, `.env` editor, API-key field.** A chip and a Check button.
+- **Scrims tab, general `.env` editor, API-key field.** A chip and a Check
+  button. **Partly reversed 2026-09-03** (section 14): `SCRIMS_LOBBY_ID` alone
+  is editable, in the Scoring group. It changes every scrim night, and it is
+  not a secret. The API key and base URL stay out of the window — they are set
+  once, and the key must never be displayed. Still no scrims tab.
 - **Rename / delete profiles from the GUI.** Duplicate only.
 - **Log search, timestamp toggle, wrap toggle.** Not in the first cut.
 - **sv-ttk / CustomTkinter / PySide / web UI.** No dependency is worth it
@@ -486,7 +500,7 @@ the scrims `--print-rotation` check, duplicate.
 
 ---
 
-## 12. Phase 1 — go live (work order)
+## 12. Phase 1 — go live (work order) — DONE, kept for history
 
 Goal: `dimod_gui2.py` does for real what it currently logs as `would run:`,
 then becomes `dimod_gui.py`. Keep dry-run available as a command-line flag
@@ -592,3 +606,203 @@ No rename, no delete (section 10).
 - Doctor rows match `python dimod.py doctor` output for the same machine.
 - Duplicate creates the file, refuses an existing name, refuses `../x`.
 - Every test in `tools/` passes; `Mod Kit.bat` opens the new window.
+
+---
+
+## 13. Phase 1 as built (2026-09-03)
+
+`dimod_gui2.py` is now `dimod_gui.py` (the old 339-line window is gone) and
+`tools/test_gui2_profiles.py` is `tools/test_gui_profiles.py`. Section 12 was
+followed; the differences worth knowing are below.
+
+### 13.1 The dispatcher
+
+Two methods rather than one, because they answer different questions:
+
+- `_run(label, fn, after)` is the machinery: worker thread,
+  `contextlib.redirect_stdout`, a `queue.Queue` drained by `after(200, ...)`,
+  the `busy` flag, and `after(result)` back on the UI thread.
+- `dispatch(label, fn, after)` is the *gate*. In `--dry-run` it logs
+  `would run: <label>` and calls `after()` anyway, so the window still shows
+  the state the action would have produced. Live it delegates to `_run` and,
+  when the worker finishes, re-reads `dimod.profiles()` and rebuilds the
+  drafts before `after()` runs.
+
+Two consequences of that split:
+
+- **The doctor calls `_run` directly.** Its checks are the kit's own
+  diagnostics; a dry run that could not report them would be the less useful
+  mode. `check_writable` and `check_scrims` are still skipped there, and say
+  so in their rows.
+- `after` is zero-argument for `dispatch` and takes `fn`'s return value for
+  `_run`. Only the doctor needs the value.
+
+**Output streams line by line** instead of arriving in one block when the
+command ends: a small `LogWriter` puts each completed line on the queue.
+`cmd_stop` waits up to five seconds for the process to die, and watching that
+happen is the difference between "working" and "hung". The thread / queue /
+drain shape from the old `dimod_gui.py` is otherwise unchanged.
+
+`_refresh_buttons` is the single place that decides what is clickable: busy
+first, then dirty state, then Run-tab gating. Nothing else calls `.state()`
+on an action button, so re-enabling after a dispatch cannot resurrect a
+button that should have stayed grey.
+
+### 13.2 Smaller decisions
+
+- **Duplicate copies what is on disk**, not the dirty draft. It is not a
+  second way to save unreviewed edits.
+- **`_reload_profiles` never discards unsaved work.** A dirty draft outranks
+  the file; everything else is rebuilt, and only when the file actually
+  differs, so an action that touched no profile does not reset the form
+  under the user's cursor.
+- **`refused:` joined the log-colour prefixes.** It is how every gated
+  `dimod` command declines, so it is the line the Run tab produces most
+  often when something is not ready.
+- **The scrims `--print-rotation` probe passes `CREATE_NO_WINDOW`.** The kit
+  is normally started with `pythonw.exe`, where a bare `subprocess.run`
+  flashes a console. Only the pusher's own stderr reaches the log; it
+  redacts the key itself, and nothing from the environment is printed.
+- `save_profile` prints nothing, so the GUI's closures print the filename
+  they wrote. That is presentation, not logic; the write itself is still
+  `dimod.save_profile`.
+
+### 13.3 Tests
+
+`tools/test_gui_profiles.py` has 12 tests: the 11 profile-model ones from
+Phase 0, plus `WindowTests`, which builds `App(dry_run=True)` and pumps the
+event loop until the startup doctor lands. Pumping rather than a bare
+construct-and-destroy is deliberate: it covers the whole
+worker-thread-to-queue-to-drain path, so a button naming a method that no
+longer exists fails here instead of when somebody double-clicks
+`Mod Kit.bat`. It skips itself when `tk.Tk()` raises.
+
+The rest of section 12.6 was verified by driving the window headlessly
+against a temp copy of `profiles/` with `cmd_stop` / `cmd_apply` /
+`cmd_launch` stubbed: an untouched Save is byte-identical, an edited Save is
+a one-line diff, Save & Deploy runs stop-apply-launch in order and clears
+dirty, Revert never touches the disk, Duplicate creates and selects the copy
+and refuses both an existing name and `../x`, a second action while busy is
+refused, a worker exception lands in the log as `ERROR:` without wedging
+`busy`, and Save / Discard / Cancel on a dirty profile switch behave as
+specified (including refusing an invalid save and staying put). In
+`--dry-run` the same sequence writes nothing at all.
+
+**Left for the user's machine**, because they need a real server or a live
+match: Start / Stop against the dedicated server, Save & Deploy end to end
+with the status strip flipping, Trigger extraction with its Lua reaction in
+the UE4SS tab, doctor rows matching `python dimod.py doctor`, and
+`Mod Kit.bat` opening the window.
+
+---
+
+## 14. Machine-local settings in the form (2026-09-03)
+
+Added after Phase 1, from two requests: there was no way to set a join
+password, and the scrims lobby id could only be changed by hand-editing
+`.env`. Both are settings the form can edit that are **not profile data**, and
+that distinction is the whole design.
+
+### 14.1 Why they are not profile fields
+
+Profiles are tracked in git, so a password in one is a password in the history
+of a shared repo. `dimod.py` already draws this line: `MANAGED_TRIPWIRE_KEYS`
+deliberately excludes `ServerName`, `Password` and the ports, so identity keys
+survive a profile switch. A profile-owned password would also mean switching
+from `scoring` to `vanilla` silently changed who can join.
+
+So: one password per machine, written straight to `TripwireServer.ini`, and
+one lobby id, written to the gitignored `.env`. Neither ever reaches a profile
+JSON — `tools/test_machine_settings.py` asserts that directly, because it is
+the kind of thing a later refactor breaks quietly.
+
+`AdminPassword` was offered and declined; it stays a hand-edit.
+
+### 14.2 How it is wired
+
+- `profile_schema.MACHINE_FIELDS` holds the two `Field`s, kept **out** of
+  `FIELDS` so `ProfileDraft` cannot round-trip them into a profile. Paths are
+  `ini.Password` and `env.SCRIMS_LOBBY_ID`.
+- `MachineDraft` mirrors `ProfileDraft`'s contract — `set`, `dirty`,
+  `validation_errors` — plus `changes()`, which returns only edited fields.
+  That is what stops a password edit from rewriting an untouched profile JSON,
+  and stops a plain Save from rewriting a `.env` that was already correct.
+- `section_fields(group)` merges profile and machine fields for one section
+  heading, so `_section` and the visibility rules see both. There is one
+  window-wide `MachineDraft`, not one per profile.
+- `dimod` owns the reads and writes: `read_env` / `write_env`,
+  `server_password` / `set_server_password`, `scrims_lobby` /
+  `set_scrims_lobby`, `scrims_env_state`. `MACHINE_IO` in the GUI maps a field
+  path to that pair. `write_env` edits line-wise rather than parsing and
+  rewriting, so comments and the API key are never disturbed, and it refuses a
+  value containing a line break instead of corrupting the file.
+- `_pending_edits` collects both halves and returns `None` to abort, so Save
+  and Save & Deploy share one refusal path.
+- Save & Deploy writes the machine settings **before** `cmd_apply`. Safe
+  because neither key is managed: apply resets only `MANAGED_TRIPWIRE_KEYS`.
+  `cmd_vanilla` does clear the password, which is correct — it restores the
+  stock ini — and `_after_dispatch` re-reads the machine values so the field
+  shows it rather than a stale value.
+
+### 14.3 Changing the lobby id has a consequence
+
+A running watcher compares `.env` against the id it started with on every tick
+and **stops** rather than push a scrim's scores to the previous lobby. So the
+GUI asks first when a watcher is live, and says the server needs a restart.
+Declining writes nothing.
+
+### 14.4 The silent skip that caused the bug report
+
+The request came out of a real failure: the scrims rotation was not being
+applied, and nothing said why. `sync_scrims_rotation()` returned `None`
+without printing when `.env` was missing — indistinguishable, from the
+outside, from a server ignoring its rotation. There was no `.env` on the
+machine at all.
+
+Two fixes, both kept:
+
+- Past the `scrims_watch` check, the profile has *asked* for scrims, so a skip
+  is a misconfiguration and is now a loud `! rotation NOT synced` with the
+  reason. It returns `False`, not `None`, so a caller can tell "nothing to do"
+  from "could not".
+- The Scoring group carries a status line: `.env` missing, or which of
+  `SCRIMS_API_KEY` / `SCRIMS_BASE_URL` / `SCRIMS_LOBBY_ID` are unset.
+  **Presence only** — no value from `.env` other than the lobby id is ever
+  displayed.
+
+---
+
+## 15. Review before the first commit (2026-09-03)
+
+Two more changes arrived from a separate chat on the same day, undocumented.
+Reviewed against the running tree before anything was committed.
+
+**Kept:**
+
+- **The log pane collapses.** The `LOGS` label in its toolbar is now a
+  disclosure button. Collapsing hides the stream tabs, gives the pane weight 0
+  and moves the sash down to fit the bare toolbar; expanding restores the exact
+  sash position from before. Verified to round-trip (469 → collapsed → 469).
+  The state is not remembered in `.gui-state.json`; nobody has asked for that.
+- **The Run tab scrolls.** It sits in a `ScrollFrame` like Setup, so a long
+  doctor list no longer pushes the operator actions off the bottom.
+
+**Removed:**
+
+- **Doctor rows filtered by the selected profile's mods.** `_collect_checks`
+  tagged each row with a mod and `_render_doctor` dropped rows whose mod the
+  *selected* profile did not enable, re-rendering on every switch. The checks
+  describe the machine and the **deployed** profile, so this hid live problems:
+  with `scoring` deployed and its `.env` broken, clicking `vanilla` in the
+  list made the scrims FAIL rows vanish and the status strip turn green. It
+  also contradicted the label above the rows and the §12.6 acceptance rule
+  that rows match `python dimod.py doctor`. There is no correct version of the
+  filter to keep: `check_scrims` already answers "not a scoring profile -
+  skipped" when a non-scrims profile is deployed, and `check_profile` only
+  lists the deployed profile's mods — so the only rows it could ever hide were
+  relevant ones. `_render_doctor` is back to rendering every row, with a
+  comment saying why.
+
+Also fixed in the same pass: the second chat's lines came in LF; the working
+copy is CRLF per `.gitattributes`, and mixed endings are the exact thing that
+file exists to end.
