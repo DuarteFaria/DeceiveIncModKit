@@ -9,6 +9,45 @@ directory; `dimod.py apply` deploys into it, `dimod.py vanilla` takes it back ou
 
 ---
 
+## First run on a new machine
+
+```bash
+python dimod.py doctor
+```
+
+That is the whole setup check. It reports the game path and how it was found,
+whether the server executable and UE4SS are present, whether the mod can
+actually write its logs, which profile is deployed, and — for a scoring profile
+— whether the scrims API answers. Exit status is non-zero only for problems that
+will stop the kit working, so it is safe to script.
+
+**The game path is detected, not configured.** The kit reads Steam's own
+library list, so a server on `D:` is found without being told. If detection
+fails, either is enough:
+
+```bash
+set DI_SERVER_PATH=D:\SteamLibrary\steamapps\common\Deceive Inc. Dedicated Server
+```
+
+or copy `config.json.example` to `config.json` and set `server_path`. Use
+forward slashes there — a lone backslash is not legal JSON. `python dipaths.py`
+prints what was resolved and from which source.
+
+A path that exists but has no server executable in it is ignored rather than
+trusted, and `doctor` names it, so a stale setting cannot half-work.
+
+**Requirements:** Windows (the dedicated server and UE4SS are Windows-only),
+Python 3.9+, and UE4SS installed into the server's `Win64` folder — see
+[docs/04-ue4ss.md](docs/04-ue4ss.md).
+
+**Write access matters.** The mods write their logs and reports next to the
+server executable, under `Program Files` on a default install. Without write
+permission there, Windows redirects the writes to a per-user `VirtualStore` and
+the scrims watcher looks for a report that is not there. `doctor` probes this
+directly rather than assuming.
+
+---
+
 ## Quick start — GUI
 
 Double-click **`Mod Kit.bat`**, or:
@@ -33,7 +72,7 @@ cd C:\Users\Duarte\DeceiveIncModKit
 
 python dimod.py status                    # what's deployed and running
 python dimod.py list                      # available mods and profiles
-python dimod.py restart tutorial-explore  # stop, apply, launch, inject
+python dimod.py restart scoring           # stop, apply, launch, inject
 python dimod.py logs 40                   # tail the UE4SS log
 python dimod.py apply vanilla             # back to stock gameplay
 ```
@@ -49,6 +88,7 @@ python dimod.py apply vanilla             # back to stock gameplay
 |---|---|
 | `extraction` | The carrier-extraction game mode. See [docs/12](docs/12-extraction-mode.md). |
 | `native-spectator-stage2` | Death-spectator + freecam. Join as a normal player, deploy, die; then `trigger-stage2` for freecam. |
+| `scoring` | Per-player ranked MP scoring. See [docs/13](docs/13-ranked-scoring.md). |
 | `vanilla` | Stock gameplay. Mods off, normal map rotation, public. |
 
 The research and probe profiles from the discovery phase were removed in the
@@ -117,6 +157,7 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
 | `DIExtraction` | The carrier-extraction mode: phase advance, loadout, disguise, teleport. |
 | `DINativeStage2` | Drives the death-spectator freecam route. |
 | `DINativeLifecycle` | Read-only lifecycle observer; part of the verified spectator profile. |
+| `DIScore` | Read-only ranked MP scoring from the game's own XP event counters. |
 
 ---
 
@@ -146,6 +187,14 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
   bootstrapper entirely, so no anti-cheat is involved.
 - **Steam updates** overwrite the game folder. After one, re-run
   `dimod.py apply <profile>`. UE4SS itself may need reinstalling.
+- **The game's own binaries are not in this repo.** Neither the server
+  executable nor `ue4ss.dll` is committed - they are not ours to redistribute -
+  so `baseline/` holds only text on a fresh clone. Nothing in the kit reads
+  them; they were a manual rollback net for a binary patch that never happened
+  (the Solo-12 patch only ever touched memory), and Steam's *verify integrity
+  of game files* restores the executable anyway. Bring your own copies in if you
+  want the net, then `python tools/verify_baseline.py` to check them against
+  the committed `manifest.sha256`.
 - Blueprint function calls from Lua can hard-crash the server - `pcall` does
   not catch it. See docs/05.
 - Applying a profile resets manager-owned gameplay keys to their stock baseline

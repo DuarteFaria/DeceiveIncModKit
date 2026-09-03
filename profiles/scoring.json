@@ -1,0 +1,20 @@
+{
+  "description": "Ranked MP scoring. Polls XpData and auto-reports at match end to DIScore.log + DIScore.report.json; launch also starts the scrims pusher in watch mode. Read-only in-game.",
+  "mods": {
+    "DIConfig": true,
+    "DIScore": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    }
+  },
+  "tripwire": {
+    "GameMode": "Solo",
+    "MaxPlayers": "8",
+    "BotsAmount": "7",
+    "bIsPublic": "False"
+  },
+  "scrims_watch": true
+}

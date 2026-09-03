@@ -22,8 +22,33 @@ The exact working runtime is archived under:
 | `DeceiveIncServer-Win64-Shipping.exe.archive` | `56CA5B9538117018748ABC7CB3E2AAF42B88BD926D74BC1F1D4278870B64778A` |
 | `ue4ss.dll` | `2A03DB20C4F930DFE741DFB028FFB7C51C6465D9AE1F22816CC881D90634581F` |
 
-`manifest.sha256` is the machine-readable source of truth. These files are an
-archive, not deployment inputs; restoring them is a deliberate manual rollback.
+`manifest.sha256` is the machine-readable source of truth **and the only one of
+the three that is committed**. The two binaries are deliberately NOT in the
+repo - they are Tripwire's executable and a third-party DLL, neither of which is
+ours to redistribute - so on a fresh clone this directory holds the manifest
+alone. That costs nothing: both were verified byte-identical to the live install
+(and to `baseline/DeceiveIncServer-Win64-Shipping.exe.stock`), so the archive
+was only ever a second copy of a file Steam will restore on demand.
+
+To recreate the archive on a machine that needs it, copy the two files in and
+check them against the manifest:
+
+```bash
+python tools/verify_baseline.py
+```
+
+`sha256sum -c manifest.sha256` works too, from inside that directory. It did
+not until `.gitattributes` pinned `*.sha256` to LF: a CRLF manifest leaves a
+stray carriage return on the filename and the open fails, which is why the
+Python version exists. Prefer `verify_baseline.py` anyway - it says what a
+mismatch MEANS, and it reads a manifest with either line ending.
+
+A mismatch means the game updated, in which case the archive is stale and the
+Stage 3 offsets in it should not be trusted. To restore the executable without
+an archive at all, use Steam's *verify integrity of game files*.
+
+These files are an archive, not deployment inputs; restoring them is a
+deliberate manual rollback.
 The server binary deliberately has an `.archive` suffix so it cannot be launched
 from this incomplete directory. Its content and SHA-256 are unchanged. Copy it
 back to the dedicated-server installation and remove only the final `.archive`

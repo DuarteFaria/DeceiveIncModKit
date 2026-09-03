@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Copy to config.json and edit. config.json is gitignored; this example is not.",
+    "",
+    "Only needed if the kit cannot find the dedicated server on its own. It looks",
+    "at DI_SERVER_PATH, then this file, then every Steam library folder listed in",
+    "libraryfolders.vdf, then the conventional install paths - so on a normal",
+    "Steam install you do not need this file at all.",
+    "",
+    "Check what was resolved, and how:   python dipaths.py",
+    "Check everything else:              python dimod.py doctor",
+    "",
+    "USE FORWARD SLASHES. They work fine on Windows and sidestep the one mistake",
+    "everybody makes here: a lone backslash is not legal JSON, so C:\\path fails",
+    "to parse while C:/path and C:\\\\path both work.",
+    "",
+    "server_path must be the folder CONTAINING",
+    "DeceiveInc/Binaries/Win64/DeceiveIncServer-Win64-Shipping.exe. A path with no",
+    "executable in it is ignored and autodetection continues, so a stale entry",
+    "cannot half-work - `dimod doctor` names it as ignored."
+  ],
+
+  "server_path": "D:/SteamLibrary/steamapps/common/Deceive Inc. Dedicated Server"
+}

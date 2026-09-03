@@ -192,6 +192,10 @@ class App(tk.Tk):
         path = os.path.join(dimod.PROFILES, n + ".json")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(p, f, indent=2)
+            # Trailing newline: profiles are tracked in git and json.dump does
+            # not write one, so without this every save dirties the repo by a
+            # single byte and shows up as a whitespace-only diff.
+            f.write("\n")
         self.log(f"saved profile '{n}'", "ok")
 
     def _run(self, label, fn):

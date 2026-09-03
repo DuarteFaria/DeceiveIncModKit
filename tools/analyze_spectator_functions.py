@@ -19,9 +19,12 @@ from iced_x86 import Decoder, Formatter, FormatterSyntax, Mnemonic, OpKind
 
 
 KIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WIN64 = (r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. "
-         r"Dedicated Server\DeceiveInc\Binaries\Win64")
-EXE = os.path.join(WIN64, "DeceiveIncServer-Win64-Shipping.exe")
+if KIT not in sys.path:
+    sys.path.insert(0, KIT)
+import dipaths
+
+WIN64 = dipaths.WIN64
+EXE = dipaths.EXE
 LOG = os.path.join(WIN64, "DINativeStage2.log")
 FUNCTION_RE = re.compile(
     r"ufunction-address path=(?P<path>\S+) object=0x(?P<address>[0-9A-Fa-f]+)")

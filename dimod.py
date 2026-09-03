@@ -5,6 +5,7 @@ dimod - Deceive Inc. dedicated-server mod manager.
 The kit is the source of truth. Nothing is authored inside the game folder;
 `apply` deploys into it and `vanilla` takes it all back out again.
 
+  python dimod.py doctor [--offline]  check this machine can run the kit
   python dimod.py status              what is deployed / running right now
   python dimod.py list                available mods and profiles
   python dimod.py apply <profile>     deploy a profile into the game folder
@@ -13,7 +14,6 @@ The kit is the source of truth. Nothing is authored inside the game folder;
   python dimod.py stop                stop the server
   python dimod.py restart <profile>   stop, apply, launch
   python dimod.py logs [n]            tail the UE4SS log
-  python dimod.py trigger-stage1      one-shot explicit freecam reproduction
   python dimod.py trigger-stage2      toggle the natural-death spectator route
   python dimod.py arm-stage2-spectator
                                       make the next connection a spectator
@@ -37,11 +37,25 @@ The kit is the source of truth. Nothing is authored inside the game folder;
                                       on deploy (purple = technician)
   python dimod.py rescue [player]     teleport a player who fell out of the
                                       world back onto solid ground
+  python dimod.py sync-rotation       point MapRotation at the lobby's lineup
+  python dimod.py score-report        ask DIScore for a mid-match MP report
+  python dimod.py score-log [n]       tail the MP scoring report
+
+With the `scoring` profile applied, `launch` also starts the scrims pusher in
+watch mode, so every finished match is scored and pushed with no further input;
+`stop` shuts it down again.
 """
-import json, os, shutil, subprocess, sys, time
+import glob, json, os, re, shutil, subprocess, sys, time
+
+import dipaths
 
 KIT = os.path.dirname(os.path.abspath(__file__))
-SERVER = r"C:\Program Files (x86)\Steam\steamapps\common\Deceive Inc. Dedicated Server"
+# Resolved, not hardcoded - see dipaths.py. When the server cannot be found,
+# SERVER is a sentinel path inside the kit rather than "", so every derived
+# os.path.join stays absolute and a missing game can never turn into a write
+# next to the current directory. Commands that touch the game call
+# require_server() first.
+SERVER = dipaths.SERVER
 WIN64 = os.path.join(SERVER, r"DeceiveInc\Binaries\Win64")
 EXE = os.path.join(WIN64, "DeceiveIncServer-Win64-Shipping.exe")
 GAME_MODS = os.path.join(WIN64, "Mods")
@@ -109,6 +123,9 @@ def load_state():
 def save_state(d):
     with open(STATE, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=2)
+        # Trailing newline, so the file is a well-formed text file even
+        # though it is local state and not tracked.
+        f.write("\n")
 
 
 def server_pid():
@@ -192,7 +209,22 @@ def write_mods_txt(enabled_map):
 
 
 def set_ini_keys(path, updates, section=None):
-    """Minimal ini rewrite that preserves unrelated lines."""
+    """Minimal ini rewrite that preserves unrelated lines.
+
+    A list value is written as REPEATED keys, one line per element, in order.
+    That is how UE populates a TArray<FString>, and MapRotation is one.
+    Comma-separating them does NOT work - proven 2026-09-02, the server logged
+
+      ignoring MapRotation entry 'A,B,C', no playable map matches
+      MapData:DA_MapData_A,B,C
+
+    i.e. it took the whole string as a single entry and fell back to the default
+    map pool. docs/01-server-config.md claimed comma-separated and was wrong."""
+    def emit(key, value):
+        if isinstance(value, (list, tuple)):
+            return [f"{key}={item}" for item in value]
+        return [f"{key}={value}"]
+
     lines = []
     if os.path.isfile(path):
         lines = open(path, encoding="utf-8-sig").read().splitlines()
@@ -202,8 +234,11 @@ def set_ini_keys(path, updates, section=None):
         s = line.strip()
         key = s.split("=")[0].strip() if "=" in s and not s.startswith(";") else None
         if key and key in updates:
+            # First occurrence becomes the whole (possibly multi-line) value;
+            # any later duplicates are dropped, so a shorter rotation cannot
+            # leave stale entries behind.
             if key not in seen:
-                out.append(f"{key}={updates[key]}")
+                out.extend(emit(key, updates[key]))
                 seen.add(key)
             continue
         out.append(line)
@@ -211,7 +246,7 @@ def set_ini_keys(path, updates, section=None):
         if k not in seen:
             if section and f"[{section}]" not in "\n".join(out):
                 out.append(f"[{section}]")
-            out.append(f"{k}={v}")
+            out.extend(emit(k, v))
     with open(path, "w", encoding="utf-8-sig") as f:
         f.write("\n".join(out) + "\n")
 
@@ -250,6 +285,21 @@ def reset_profile_gameplay_keys():
 
 
 # ---------------------------------------------------------------- commands
+
+def require_server():
+    """Refuse, with instructions, when the game was not found.
+
+    Called by every command that reads or writes the game folder. Without it
+    those commands would operate on dipaths' sentinel path and report a
+    confusing absence of files instead of the actual problem."""
+    if dipaths.FOUND:
+        return True
+    print()
+    print(c("r", dipaths.explain(dipaths.RESOLUTION)))
+    print()
+    print(c("d", "  `python dimod.py doctor` checks everything else too.\n"))
+    return False
+
 
 def cmd_status():
     print(c("b", "\n  Deceive Inc. mod kit\n"))
@@ -320,8 +370,7 @@ def cmd_apply(name):
 
     # One-shot native/Lua markers must never survive a restart or profile
     # switch. They are re-created only by explicit commands/login hooks.
-    for transient in ("DINativeSpectator.stage1-trigger",
-                      "DINativeSpectator.stage2-trigger",
+    for transient in ("DINativeSpectator.stage2-trigger",
                       "DINativeSpectator.next-dedicated",
                       "DINativeSpectator.readiness-override",
                       "DINativeSpectator.force-death",
@@ -334,7 +383,8 @@ def cmd_apply(name):
                       "DIExtraction.recon",
                       "DIExtraction.loadout",
                       "DIExtraction.disguise",
-                      "DIExtraction.rescue"):
+                      "DIExtraction.rescue",
+                      "DIScore.report"):
         transient_path = os.path.join(WIN64, transient)
         if os.path.isfile(transient_path):
             os.remove(transient_path)
@@ -404,11 +454,16 @@ def cmd_vanilla(remove_ue4ss=False):
     if os.path.isfile(DICONFIG):
         os.remove(DICONFIG)
         print("    removed DIConfig.ini")
-    for f in ("DIProbe_dump.txt", "DITut_dump.txt"):
-        p = os.path.join(WIN64, f)
-        if os.path.isfile(p):
+    # Mod output. Globbed rather than listed by name: the previous hard-coded
+    # pair named two mods that no longer exist while leaving every current
+    # mod's log behind, and orphaned dumps from removed mods accumulated in the
+    # game folder. Patterns cover both without needing an edit per mod.
+    # DI*.log already covers DINativeSpectator-*.log; overlapping patterns would
+    # os.remove an already-removed path and take vanilla down with it.
+    for pattern in ("DI*_dump.txt", "DI*.log"):
+        for p in sorted(glob.glob(os.path.join(WIN64, pattern))):
             os.remove(p)
-            print(f"    removed {f}")
+            print(f"    removed {os.path.basename(p)}")
 
     orig = os.path.join(BASELINE, "TripwireServer.ini.original")
     if os.path.isfile(orig):
@@ -443,6 +498,195 @@ def cmd_vanilla(remove_ue4ss=False):
     print(c("g", "\n  stock state restored.\n"))
 
 
+# Written by launch, read by stop. A pid file rather than state in
+# .deployed.json, because the watcher's lifetime is tied to a server run and not
+# to which profile is deployed.
+WATCHER_PID = os.path.join(KIT, ".scrims-watcher.pid")
+
+
+def python_exe():
+    exe = sys.executable
+    if os.path.basename(exe).lower() == "pythonw.exe":
+        cand = os.path.join(os.path.dirname(exe), "python.exe")
+        if os.path.isfile(cand):
+            return cand
+    return exe
+
+
+EXIT_LINEUP_DONE = 3   # tools/scrims_push.py: the lineup is finished
+
+
+def sync_scrims_rotation():
+    """Point the server's map rotation at the lobby's lineup.
+
+    A mismatched rotation is not a scripting error but it silently breaks
+    scoring: the site files a result under the map it expected at that index,
+    so a match played on the wrong map never shows up.
+
+    Run at LAUNCH, not at apply: MapRotation and bRandomizeMap are in
+    MANAGED_TRIPWIRE_KEYS, so `apply` resets them to baseline first. Launch is
+    the last point before the server reads the file.
+
+    -> True   the rotation was written
+       None   nothing to do: not a scrims profile, or the lineup is finished
+       False  it failed
+
+    None and False are deliberately distinct: a finished scrim is a normal end
+    state and must not be reported as an error. Never fatal either way - a
+    rotation we could not sync is worth a loud warning, not a refusal to start
+    the server."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return None
+    if not os.path.isfile(os.path.join(KIT, ".env")):
+        return None
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    if not os.path.isfile(pusher):
+        return None
+
+    print(c("b", "\n  syncing map rotation to the lobby lineup"))
+    r = subprocess.run([python_exe(), pusher, "--print-rotation"],
+                       capture_output=True, text=True, cwd=KIT)
+    # The pusher puts its reasoning on stderr and ONLY the rotation on stdout.
+    for line in (r.stderr or "").splitlines():
+        print("  " + line)
+
+    if r.returncode == EXIT_LINEUP_DONE:
+        print(c("d", "    the server still starts, on whatever rotation it has."))
+        return None
+    if r.returncode:
+        print(c("y", "  ! rotation NOT synced - the server keeps its current one."))
+        print(c("d", "    Scores for a map the lobby does not expect will not appear."))
+        return False
+
+    rotation = (r.stdout or "").strip()
+    if not rotation:
+        print(c("y", "  ! lineup returned no maps - rotation left alone"))
+        return False
+
+    # A LIST, so set_ini_keys emits one MapRotation= line per map. A single
+    # comma-separated line is parsed as one entry and silently discarded.
+    entries = [m.strip() for m in rotation.split(",") if m.strip()]
+
+    # Anything that is not a bare map name means the contract above broke, and
+    # writing it would corrupt the rotation silently - which is exactly what
+    # happened while this read the last line of a combined stream.
+    bad = [e for e in entries if not re.fullmatch(r"[A-Za-z0-9_]+", e)]
+    if bad:
+        print(c("y", f"  ! unexpected rotation output {bad!r} - rotation left alone"))
+        return False
+    set_ini_keys(TRIPWIRE, {"MapRotation": entries, "bRandomizeMap": "False"})
+    for i, m in enumerate(entries):
+        print(c("g", f"  MapRotation={m}") + c("d", f"   (map {i})"))
+    print(c("d", "  bRandomizeMap=False (round-robin, so match N is lineup map N)"))
+    return True
+
+
+def pid_alive(pid):
+    """Is this pid a live process? ctypes rather than tasklist, to match
+    server_pid() - no subprocess churn for something the GUI may poll."""
+    import ctypes
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        h = k32.OpenProcess(0x0400, False, int(pid))   # QUERY_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            # An exited process still opens until its handles close, so check
+            # the exit code: 259 is STILL_ACTIVE.
+            if k32.GetExitCodeProcess(h, ctypes.byref(code)):
+                return code.value == 259
+            return True
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return False
+
+
+def watcher_pid():
+    """-> the live watcher's pid, or None.
+
+    A stale pidfile is cleared as a side effect. It happens routinely: the
+    watcher owns its own console, so closing that window kills it without
+    stop_scrims_watcher ever running."""
+    try:
+        with open(WATCHER_PID, encoding="ascii") as f:
+            pid = int(f.read().strip())
+    except Exception:
+        return None
+    if pid_alive(pid):
+        return pid
+    try:
+        os.remove(WATCHER_PID)
+        print(c("d", f"  cleared stale watcher pidfile (pid {pid} is gone)"))
+    except OSError:
+        pass
+    return None
+
+
+def start_scrims_watcher():
+    """Spawn the scrims pusher in --watch mode for profiles that ask for it.
+
+    Opt-in per profile ("scrims_watch": true) so an ordinary profile never
+    starts a process that talks to the network. Skipped with an explanation if
+    .env is missing, rather than starting a watcher that will only fail."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return
+    if not os.path.isfile(os.path.join(KIT, ".env")):
+        print(c("y", "  scrims watcher not started: no .env "
+                     "(copy .env.example and fill it in)"))
+        return
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    if not os.path.isfile(pusher):
+        print(c("r", "  scrims watcher not started: tools/scrims_push.py missing"))
+        return
+
+    # Refuse rather than spawn a second one. Two watchers both push, and only
+    # the newest is in the pidfile - so `stop` would leave the other running,
+    # pushing with whatever lobby id it started with. `restart` is unaffected
+    # because it stops first.
+    running = watcher_pid()
+    if running:
+        print(c("y", f"  scrims watcher already running (pid {running}) - "
+                     f"not starting a second one"))
+        print(c("d", "    two watchers would both push, and stop only tracks "
+                     "the newest.\n"
+                     "    Use `dimod.py restart <profile>`, or `stop` first."))
+        return
+
+    exe = python_exe()
+
+    # Its own console window: the whole point is that pushes are visible
+    # without the user going looking for a log.
+    flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    try:
+        proc = subprocess.Popen([exe, pusher, "--watch"], cwd=KIT, creationflags=flags)
+    except Exception as e:
+        print(c("r", f"  scrims watcher failed to start: {e}"))
+        return
+    with open(WATCHER_PID, "w", encoding="ascii") as f:
+        f.write(str(proc.pid))
+    print(c("g", f"  scrims watcher started (pid {proc.pid}) - scores push automatically"))
+
+
+def stop_scrims_watcher():
+    try:
+        with open(WATCHER_PID, encoding="ascii") as f:
+            pid = int(f.read().strip())
+    except Exception:
+        return
+    os.remove(WATCHER_PID)
+    # taskkill rather than ctypes: the watcher owns a console, and its child
+    # python process should go with it.
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                   capture_output=True, text=True)
+    print(c("d", f"  scrims watcher stopped (pid {pid})"))
+
+
 def cmd_launch(mode=None):
     if server_pid():
         print(c("y", "  server already running"))
@@ -470,6 +714,7 @@ def cmd_launch(mode=None):
     if not os.path.isfile(inject):
         print(c("r", "  tools/inject.py missing"))
         return 1
+    sync_scrims_rotation()
     print(c("b", "\n  launching server (direct exe, no EAC) + injecting UE4SS\n"))
     # capture and re-print, so callers that redirect stdout (the GUI) see it
     exe = sys.executable
@@ -481,8 +726,7 @@ def cmd_launch(mode=None):
     profile = profiles().get(active, {})
     native_modules = profile.get("native_modules", [])
     launch_env = os.environ.copy()
-    if any(m in ("DINativeSpectatorStage1", "DINativeSpectatorStage2",
-                 "DINativeSpectatorStage3")
+    if any(m in ("DINativeSpectatorStage2", "DINativeSpectatorStage3")
            for m in native_modules):
         launch_env["DIMOD_POST_INJECT_WAIT"] = "0.25"
     r = subprocess.run([exe, inject, "--launch"], capture_output=True, text=True,
@@ -496,20 +740,24 @@ def cmd_launch(mode=None):
 
     # Native DLLs are opt-in and profile-gated. Ordinary profiles have no
     # native_modules key, so the native loader is never invoked for them.
-    if any(m in ("DINativeSpectator", "DINativeSpectatorStage1",
-                 "DINativeSpectatorStage2", "DINativeSpectatorStage3")
+    if any(m in ("DINativeSpectatorStage2", "DINativeSpectatorStage3")
            for m in native_modules):
         loader = os.path.join(KIT, "tools", "load_native_spectator.py")
         native = subprocess.run([exe, loader], capture_output=True, text=True)
         for line in (native.stdout or "").splitlines(): print("  " + line)
         for line in (native.stderr or "").splitlines(): print("  " + line)
-        return native.returncode
+        if native.returncode:
+            return native.returncode
+        start_scrims_watcher()
+        return 0
+    start_scrims_watcher()
     return 0
 
 
 def cmd_stop():
     import ctypes
     import ctypes.wintypes as w
+    stop_scrims_watcher()
     pid = server_pid()
     if not pid:
         print(c("d", "  server not running"))
@@ -536,26 +784,6 @@ def cmd_logs(n=40):
     lines = open(UE4SS_LOG, encoding="utf-8", errors="replace").read().splitlines()
     for l in lines[-int(n):]:
         print("  " + l)
-
-
-def cmd_trigger_stage1():
-    if load_state().get("profile") != "native-spectator-stage1":
-        print(c("r", "  refused: native-spectator-stage1 is not active"))
-        return 1
-    pid = server_pid()
-    if not pid:
-        print(c("r", "  refused: dedicated server is not running"))
-        return 1
-    marker = os.path.join(WIN64, "DINativeSpectator.stage1-trigger")
-    # CREATE_NEW semantics: never queue or duplicate a trigger.
-    try:
-        with open(marker, "x", encoding="ascii") as f:
-            f.write("TRIGGER\n")
-    except FileExistsError:
-        print(c("r", "  refused: a Stage 1 trigger is already pending"))
-        return 1
-    print(c("y", f"  Stage 1 one-shot trigger armed for dedicated server pid {pid}"))
-    return 0
 
 
 def cmd_trigger_stage2(mode=None):
@@ -828,6 +1056,256 @@ def cmd_rescue(target=None):
         print(c("r", "  refused: a rescue is already pending"))
         return 1
     print(c("y", f"  rescue requested on pid {pid}"))
+
+# ------------------------------------------------------------------ doctor
+#
+# One command that says why the kit will not work here. Every check reports
+# rather than raises, so a broken install still produces the full picture
+# instead of stopping at the first fault.
+
+MIN_PYTHON = (3, 9)
+
+
+class Check:
+    """A single finding. `fix` is the line the operator should act on."""
+
+    def __init__(self, level, label, detail="", fix=""):
+        self.level, self.label, self.detail, self.fix = level, label, detail, fix
+
+
+def _ok(label, detail=""):   return Check("ok", label, detail)
+def _warn(label, d="", f=""): return Check("warn", label, d, f)
+def _fail(label, d="", f=""): return Check("fail", label, d, f)
+
+
+def check_platform():
+    if sys.platform != "win32":
+        return [_fail("platform", f"{sys.platform}, but the dedicated server "
+                                  f"and UE4SS are Windows-only",
+                      "run the kit on Windows")]
+    out = [_ok("platform", sys.platform)]
+    v = sys.version_info
+    ver = f"{v.major}.{v.minor}.{v.micro}"
+    if (v.major, v.minor) < MIN_PYTHON:
+        out.append(_fail("python", f"{ver}, need >= "
+                                   f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"))
+    else:
+        out.append(_ok("python", ver))
+    return out
+
+
+def check_server():
+    res = dipaths.RESOLUTION
+    if not res:
+        return [_fail("server path", "not found",
+                      f"set {dipaths.ENV_VAR}, or put server_path in "
+                      f"config.json - `python dipaths.py` explains")]
+    out = [_ok("server path", SERVER), _ok("  found via", res.how)]
+    # A source that was set but wrong is worth naming even on success: it is
+    # almost always a typo the operator meant to take effect.
+    for label, path, why in res.tried:
+        if path and why == "no server executable there":
+            out.append(_warn(f"  {label}", f"ignored - {why}  [{path}]",
+                             "correct or remove it; a live setting that does "
+                             "nothing is worse than none"))
+        elif path is None and why not in ("not set", "no match"):
+            # A source that errored. Autodetection may have covered for it,
+            # but a config file that does nothing has to be reported.
+            out.append(_warn(f"  {label}", why, "fix or delete it"))
+    out.append(_ok("  executable", os.path.basename(EXE))
+               if os.path.isfile(EXE) else
+               _fail("  executable", "missing", "verify integrity in Steam"))
+    return out
+
+
+def check_writable():
+    """The one that bites on a machine other than the author's.
+
+    The mod writes DIScore.log / .report.json next to the server executable,
+    which lives under Program Files. Without write access Windows either
+    refuses or silently redirects to a per-user VirtualStore, where the watcher
+    then looks for a report that is not there."""
+    if not os.path.isdir(WIN64):
+        return [_fail("Win64 writable", "directory does not exist")]
+    probe = os.path.join(WIN64, ".dimod-write-probe")
+    try:
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("probe")
+        os.remove(probe)
+        return [_ok("Win64 writable", "mod reports and logs can be written")]
+    except PermissionError:
+        return [_fail("Win64 writable", "permission denied",
+                      "run the shell as Administrator, or grant your user "
+                      "write access to the Win64 folder - the mod cannot "
+                      "write its report without it")]
+    except OSError as e:
+        return [_fail("Win64 writable", f"{type(e).__name__}: {e}")]
+
+
+def check_ue4ss():
+    if not ue4ss_installed():
+        return [_fail("UE4SS", "ue4ss.dll not in Win64",
+                      "install UE4SS into the server's Win64 folder - "
+                      "see docs/04-ue4ss.md")]
+    out = [_ok("UE4SS", "installed")]
+    inject = os.path.join(KIT, "tools", "inject.py")
+    out.append(_ok("  tools/inject.py", "present") if os.path.isfile(inject)
+               else _fail("  tools/inject.py", "missing - launch cannot inject"))
+    return out
+
+
+def check_baseline():
+    orig = os.path.join(BASELINE, "TripwireServer.ini.original")
+    if not os.path.isfile(orig):
+        return [_fail("baseline config", "TripwireServer.ini.original missing",
+                      "apply cannot reset profile-owned keys to stock, so one "
+                      "profile's settings will leak into the next")]
+    have = set(read_ini_values(orig))
+    missing = sorted(MANAGED_TRIPWIRE_KEYS - have)
+    if missing:
+        return [_warn("baseline config", f"no stock value for {missing}",
+                      "those keys are removed on apply rather than reset")]
+    return [_ok("baseline config", f"{len(have)} stock keys")]
+
+
+def check_profile():
+    st = load_state()
+    active = st.get("profile")
+    if not active:
+        return [_warn("profile", "none applied", "python dimod.py apply <profile>")]
+    if active not in profiles():
+        return [_fail("profile", f"{active!r} is deployed but no longer exists",
+                      "apply a profile that exists")]
+    out = [_ok("profile", f"{active}  (applied {st.get('applied_at', '?')})")]
+    entries, _ = read_mods_txt()
+    emap = dict(entries)
+    wanted = [m for m, on in (profiles()[active].get("mods") or {}).items() if on]
+    for m in wanted:
+        if not os.path.isdir(os.path.join(GAME_MODS, m)):
+            out.append(_fail(f"  mod {m}", "not deployed", "re-run apply"))
+        elif not emap.get(m, False):
+            out.append(_warn(f"  mod {m}", "deployed but disabled in mods.txt"))
+        else:
+            out.append(_ok(f"  mod {m}", "deployed and enabled"))
+    return out
+
+
+def check_scrims(net=True):
+    """Only meaningful for a profile that pushes scores."""
+    active = load_state().get("profile")
+    if not profiles().get(active, {}).get("scrims_watch"):
+        return [_ok("scrims", "not a scoring profile - skipped")]
+
+    env = os.path.join(KIT, ".env")
+    if not os.path.isfile(env):
+        return [_fail("scrims .env", "missing",
+                      "copy .env.example to .env and fill it in")]
+
+    values = {}
+    try:
+        for line in open(env, encoding="utf-8-sig"):
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            values[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError as e:
+        return [_fail("scrims .env", f"unreadable: {e}")]
+
+    out = [_ok("scrims .env", "present")]
+    for key in ("SCRIMS_API_KEY", "SCRIMS_BASE_URL", "SCRIMS_LOBBY_ID"):
+        out.append(_ok(f"  {key}", "set") if values.get(key)
+                   else _fail(f"  {key}", "empty or absent"))
+    if any(ch.level == "fail" for ch in out):
+        return out
+    if not net:
+        out.append(_ok("  API", "not checked (--offline)"))
+        return out
+
+    pusher = os.path.join(KIT, "tools", "scrims_push.py")
+    r = subprocess.run([python_exe(), pusher, "--print-rotation"],
+                       capture_output=True, text=True, cwd=KIT)
+    if r.returncode == 0:
+        out.append(_ok("  API", "reachable; rotation resolves"))
+    elif r.returncode == EXIT_LINEUP_DONE:
+        out.append(_warn("  API", "reachable, but every lineup map is scored",
+                         "start a new lobby, or --full-rotation to replay"))
+    else:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()
+        out.append(_fail("  API", tail[-1].strip() if tail else
+                                  f"exit {r.returncode}",
+                         "check SCRIMS_BASE_URL, the key, and the lobby id"))
+    return out
+
+
+def cmd_doctor(offline=False):
+    print(c("b", "\n  dimod doctor\n"))
+    groups = [
+        ("environment", check_platform()),
+        ("game", check_server() + check_writable()),
+        ("modding", check_ue4ss() + check_baseline()),
+        ("deployment", check_profile()),
+        ("scoring", check_scrims(net=not offline)),
+    ]
+
+    fails = warns = 0
+    for title, checks in groups:
+        print(c("b", f"  {title}"))
+        for ch in checks:
+            if ch.level == "ok":
+                mark, colour = "ok  ", "g"
+            elif ch.level == "warn":
+                mark, colour, warns = "warn", "y", warns + 1
+            else:
+                mark, colour, fails = "FAIL", "r", fails + 1
+            print(f"    {c(colour, mark)}  {ch.label:<22} {c('d', ch.detail)}")
+            if ch.fix and ch.level != "ok":
+                print(f"          {c('d', '-> ' + ch.fix)}")
+        print()
+
+    if fails:
+        print(c("r", f"  {fails} problem(s) will stop the kit working here")
+              + (c("y", f", {warns} warning(s)") if warns else "") + "\n")
+        return 1
+    if warns:
+        print(c("y", f"  no blockers, {warns} warning(s)\n"))
+        return 0
+    print(c("g", "  all checks passed\n"))
+    return 0
+
+def cmd_score_report():
+    """Ask DIScore for an immediate mid-match report instead of waiting for
+    MatchResultsPosted. The mod polls for the marker every 2s."""
+    if load_state().get("profile") != "scoring":
+        print(c("r", "  refused: the scoring profile is not active"))
+        return 1
+    pid = server_pid()
+    if not pid:
+        print(c("r", "  refused: dedicated server is not running"))
+        return 1
+    marker = os.path.join(WIN64, "DIScore.report")
+    try:
+        with open(marker, "x", encoding="ascii") as f:
+            f.write("REPORT\n")
+    except FileExistsError:
+        print(c("r", "  refused: a report request is already pending"))
+        return 1
+    print(c("y", f"  scoring report requested on pid {pid}"))
+    print(c("d", "  read it with:  python dimod.py score-log"))
+    return 0
+
+
+def cmd_score_log(n=120):
+    """Tail DIScore.log. Separate from `logs` because the scoring output is the
+    deliverable, not UE4SS diagnostics."""
+    path = os.path.join(WIN64, "DIScore.log")
+    if not os.path.isfile(path):
+        print(c("r", "  no DIScore.log yet (has the scoring profile run a match?)"))
+        return 1
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+    for line in lines[-int(n):]:
+        print("  " + line.rstrip())
     return 0
 
 
@@ -837,6 +1315,17 @@ def main():
         print(__doc__)
         return 0
     cmd = a[0]
+
+    # Commands that neither read nor write the game folder. Everything else is
+    # gated here rather than in fifteen separate functions: without the game,
+    # they would operate on dipaths' sentinel path and report a puzzling
+    # absence of files instead of the real problem.
+    KIT_ONLY = ("doctor", "list")
+    if cmd not in KIT_ONLY and not require_server():
+        return 1
+
+    if cmd == "doctor":
+        return cmd_doctor(offline="--offline" in a[1:])
     if cmd == "status":  return cmd_status()
     if cmd == "list":    return cmd_list()
     if cmd == "apply":
@@ -851,7 +1340,6 @@ def main():
             if cmd_apply(a[1]): return 1
         return cmd_launch()
     if cmd == "logs":    return cmd_logs(a[1] if len(a) > 1 else 40)
-    if cmd == "trigger-stage1": return cmd_trigger_stage1()
     if cmd == "trigger-stage2":
         return cmd_trigger_stage2(a[1] if len(a) > 1 else None)
     if cmd == "arm-stage2-spectator": return cmd_arm_stage2_spectator()
@@ -872,6 +1360,12 @@ def main():
                             a[2] if len(a) > 2 else None)
     if cmd == "rescue":
         return cmd_rescue(a[1] if len(a) > 1 else None)
+    if cmd == "sync-rotation":
+        # None (nothing to do, lineup finished) is not a failure.
+        return 1 if sync_scrims_rotation() is False else 0
+    if cmd == "score-report": return cmd_score_report()
+    if cmd == "score-log":
+        return cmd_score_log(a[1] if len(a) > 1 else 120)
     print(c("r", f"  unknown command: {cmd}"))
     print(__doc__)
     return 1
