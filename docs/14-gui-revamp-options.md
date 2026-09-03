@@ -125,15 +125,6 @@ separator instead of LabelFrames everywhere). Status "chips" are plain
 labels with coloured text; do not build a chip widget. Remember window
 geometry in a gitignored `.gui-state.json`.
 
-Mockups in `img/gui-revamp/` predate the 2-tab decision and show five tabs;
-the **content** of each is still the reference:
-[Profile](img/gui-revamp/L1-profile-tab.png) +
-[Server](img/gui-revamp/L1-server-tab.png) together become Setup;
-[In-match](img/gui-revamp/L1-in-match-tab.png) +
-[Doctor](img/gui-revamp/L1-doctor-tab.png) together become Run, with the
-cuts in section 5 applied. Rendered in HTML at 1000x780; ttk will look
-plainer.
-
 ---
 
 ## 4. Setup tab: schema-driven form + Raw JSON
