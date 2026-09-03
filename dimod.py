@@ -123,6 +123,9 @@ def load_state():
 def save_state(d):
     with open(STATE, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=2)
+        # Trailing newline, so the file is a well-formed text file even
+        # though it is local state and not tracked.
+        f.write("\n")
 
 
 def server_pid():

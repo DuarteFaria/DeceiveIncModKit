@@ -420,6 +420,9 @@ def enqueue(item):
     path = os.path.join(QUEUE, f"{int(time.time() * 1000)}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(item, f, indent=2)
+        # Trailing newline: a queued payload is read back by --flush and
+        # may well be looked at by hand first.
+        f.write("\n")
     return path
 
 
@@ -496,6 +499,8 @@ def save_pushed(ids):
     # would eventually make every watcher tick read a large file.
     with open(PUSHED, "w", encoding="utf-8") as f:
         json.dump(sorted(ids)[-500:], f, indent=2)
+        # Trailing newline, for the same reason as everywhere else here.
+        f.write("\n")
 
 
 def push_once(a, key, report):
