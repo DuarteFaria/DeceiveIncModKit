@@ -1,12 +1,10 @@
 # 12 — Carrier-extraction game mode (DIExtraction)
 
 A custom mode built entirely from the game's own endgame systems: one
-designated player is delivered to the briefcase the moment the vault opens, and
-every other spy — humans and bots alike — is dropped in a ring around them, so
-the match opens as an instant brawl over the case rather than a hunt across the
-map. Everything after the grab is the stock `ObjectiveKillCarrier` flow. No
-client mod, no native DLL — pure server-side Lua over replicated,
-server-authoritative state.
+designated player is delivered to the briefcase the moment the vault opens;
+everyone else hunts them (the stock `ObjectiveKillCarrier` flow). No client
+mod, no native DLL — pure server-side Lua over replicated, server-authoritative
+state.
 
 ## Design (approach A, "natural grab")
 
@@ -19,12 +17,10 @@ mod lets the match start normally, then:
 2. **Advance once**: `ADeceiveIncMatchGameState:AdvancePhase(true)` — the
    proven genuine timer-expiry branch (route31 evidence). The game runs its own
    `OnVaultUnlockedPhaseStart`, spawning/enabling the briefcase.
-3. **Teleport** the carrier's pawn onto the live `BP_Briefcase_C`
-   (`K2_TeleportTo`, straight above the case so they drop onto it). Retries
-   every second until the briefcase exists and the teleport lands.
-4. **Gather** every other live spy pawn into a ring around the objective
-   (see below). Once per match, right after the carrier lands.
-5. **Hand off.** The player grabs the case through the game's own pickup
+3. **Teleport** the carrier's pawn next to the live `BP_Briefcase_C`
+   (`K2_TeleportTo`, +150/+60 offset). Retries every second until the
+   briefcase exists and the teleport lands.
+4. **Hand off.** The player grabs the case through the game's own pickup
    (`ABP_BasePickableActor_C` interaction); the carrier state, kill-carrier
    objectives, extraction call, and win/lose all run stock.
 
@@ -53,18 +49,12 @@ written from the profile and does survive, so the profile declares it:
 [Extraction]
 AutoArm = 1
 AutoLoadout = 1
-GatherAll = 1
-FreezeBots = 1
-FreezeGraceSeconds = 5
 Disguise = purple
 ```
 
-`Carrier = <name substring>` is also accepted. `AutoLoadout` kits the players
-out automatically when the vault opens (on the game thread — see below) — the grant was manual-only at first,
-which meant it simply never happened during a normal play session. With
-`GatherAll` on it fills **everyone**, bots included, because a carrier entering
-the brawl on full charges against bots on spawn ammo is not a fight; with
-`GatherAll = 0` it stays carrier-only, matching the carrier-only delivery.
+`Carrier = <name substring>` is also accepted. `AutoLoadout` kits the carrier
+out automatically when the vault opens — the grant was manual-only at first,
+which meant it simply never happened during a normal play session.
 
 The loadout and disguise are applied **before** the teleport is attempted, and
 only once per match. Ordering it that way means a teleport that cannot find a
@@ -75,133 +65,6 @@ The trigger can be armed before anyone joins — the mod idles until
 VAULT_LOCKED with a deployed human. Default carrier is the first human
 connection, and the log names whoever it resolved so a test run can confirm the
 right player was picked. Log: `DIExtraction.log` in the server Win64 folder.
-
-### Gathering the lobby (`GatherAll`)
-
-The carrier alone at the case is a hunt: the bots are wherever the match left
-them and have to walk in. `GatherAll` (on by default; `GatherAll = 0` restores
-the carrier-only delivery) teleports **every** other live spy — humans and bots
-alike — into a ring around the objective the moment the carrier lands, which
-turns the vault opening into an immediate fight over the case.
-
-Two details make it work rather than pile everyone into one spot:
-
-- **Per-pawn arcs.** `K2_TeleportTo` sweeps for collision and refuses a
-  destination another pawn already occupies. If every spy walked the same
-  candidate list, the tail of the lobby would land further and further out, or
-  not at all. Each pawn instead owns its own arc of the ring — slot *n* of *N*
-  starts at `2πn/N` — and only widens (350 → 550 → 800 uu) if its own arc is
-  blocked. Yaw faces the objective, so everyone arrives looking at the case.
-- **Both pawn sources are swept and merged** by full name: `FindAllOf("Spy")`
-  plus the `Pawn` of every live `DeceiveIncPlayerController`. This is not
-  belt-and-braces: the first live run found all seven bots through the ASpy
-  sweep and **none** through a controller, because bot players are
-  `ADeceiveIncPlayerBotController` (an `AAIController`), which that class lookup
-  does not return. Missing a pawn means a spy left across the map while everyone
-  else brawls.
-
-The gather is best-effort and latched separately from the carrier delivery: a
-spy the sweep cannot fit anywhere is left where they are and logged, and a
-carrier that cannot be placed still gets the brawl. Per-pawn results land in
-`DIExtraction.log` as a `gather <name> (human|bot) ok=…` block.
-
-### Freezing the bots until the humans are in (`FreezeBots`)
-
-Fast-forwarding the vault opens it about ten seconds into the match, which can
-land before a human client has finished loading — so the player arrives to bots
-already shooting each other. `FreezeBots` (on by default) holds every bot spy
-still from `POSING_SPY_INTRO` until the humans are actually playing, and the
-`AdvancePhase` waits on the same signal, so the brawl cannot start without them.
-
-- **Frozen** = the character movement component's own `MOVE_None`
-  (`DisableMovement`), and nothing else. The pre-freeze movement mode is
-  remembered per pawn **by name** (a plain string — never a retained UObject
-  wrapper) and restored on thaw.
-- **There is no weapon half, and both candidates are ruled out.**
-  `ASpy::AllowWeapon` is client-side — on a dedicated server it logged `This is
-  made to work on local spies only`, once per bot per tick. Writing
-  `bWeaponDisabled` left `IsShootingBlocked()` reading false for the whole hold:
-  a no-op, and a cross-thread write to a bot pawn, which is the category that
-  has been killing this server. So **a held bot can still shoot** — it just
-  cannot move, chase, or reach the objective before the humans do.
-- Re-applied every tick while held, because a bot's own movement code sets
-  itself walking again between ticks.
-- **Ready** = `ADeceiveIncPlayerController.bIsReady` (the flag behind the
-  client's own `Server_ClientIsReady` RPC) **and** a live pawn. Ready without a
-  pawn is still not someone who can defend themselves.
-- `FreezeGraceSeconds` (default 5) is the calm held after the last human reads
-  ready; `FreezeMaxWaitSeconds` (default 30) releases the bots anyway, so a
-  readiness flag that never flips can never hang the mode. Which of the two
-  ended the hold is stated in the log.
-- **`bIsReady` flips early.** A live run read `ready=true deployed=true` on the
-  very first tick of `POSING_SPY_INTRO`, so it is a lobby-side flag, not "the
-  client finished loading". The effective hold is therefore
-  `FreezeGraceSeconds` after deploy — raise it if the window is still tight.
-  That knob is the whole control.
-
-Bots are identified per pawn by `ASpy.bIsBot`, never through a controller: a
-live run showed bots are **not** `ADeceiveIncPlayerController` instances at all
-(they are `ADeceiveIncPlayerBotController`, an `AAIController`), so there is
-frequently no player controller to ask about them. That is also why the gather
-sweeps `FindAllOf("Spy")` and why bot names in the log come from the pawn's own
-`PlayerState`.
-
-### The threading rule (two crashes, and one wrong fix)
-
-`LoopAsync` runs its callback on **its own thread** — the UE4SS API says
-"asynchronously" and means it. So every UFunction this mod calls from a tick is
-a cross-thread call into a running engine. That is survivable for most calls,
-which is what makes it dangerous: the mod did it for days before it cost
-anything.
-
-**Crash A — the call that could not survive it.** `AddResource` on a **bot**.
-The bots' own weapon code decrements the same Ammo counter on the game thread;
-our grant wrote it from the async thread; the server exited status-3 *after* the
-engine logged the add and *before* the mod could log its own line. The human's
-identical grant had been fine for days, because nothing was fighting it for that
-counter.
-
-**Crash B — the fix that made it worse.** `ExecuteInGameThread(fn)` runs a
-closure on the game thread, so the grant was handed to it, one closure per pawn.
-The server died again — this time with a real callstack, **entirely inside
-`ue4ss.dll`**, reading address 0. The reason is that the closure runs *Lua* on
-the game thread while the tick is still running *Lua* on the async thread. Two
-threads, one `lua_State`. Deferring part of a tick is worse than not deferring
-at all.
-
-**Where that leaves things.** Everything runs on the one async thread, and the
-operations that cannot survive that are simply not performed:
-
-- Humans get the full grant (proven across many runs).
-- **Bots get none.** The game already kits them at spawn — ammo, charges, intel
-  — so the practical cost is small, and the log says so per pawn rather than
-  pretending otherwise.
-- Doing it properly needs the native ProcessEvent invoker (see `docs/11`), which
-  calls into the game thread without dragging the Lua state along. That is a
-  separate piece of work, not a flag.
-
-### The null-wrapper rule (this one killed the server)
-
-UE4SS hands back a Lua wrapper **even when the underlying UObject pointer is
-NULL**, so `object ~= nil` is not a validity test. Calling a UFunction through
-one of those exits the server with `RequestExitWithStatus(1, 3)` and **nothing
-in any log** — no callstack, no `Critical error` block, and `pcall` cannot catch
-it, because it is not a Lua error.
-
-That is exactly how the first everyone-loadout died: a bot's `PlayerState`
-wrapper read non-nil, `GetPlayerName()` went through it for a log label, and the
-process was gone before the next line could be written. The mod's last log line
-was the section header immediately before the call.
-
-The fix is `valid()` — `object:IsValid()` where the wrapper has it, falling back
-to whether the object can name itself — and `is_live()` now calls it first, so
-every existing call site is covered. Two habits follow from this:
-
-- Anything obtained from a **property read** (`.PlayerState`, `.Pawn`,
-  `.CharacterMovement`) is suspect; things from `FindAllOf` are not.
-- Log the target's name **before** touching it, never after. A status-3 exit
-  writes nothing, so the last name in the log is the object that killed the
-  server. `loadout target <pawn>` exists for exactly that reason.
 
 ### Who counts as "human"
 
