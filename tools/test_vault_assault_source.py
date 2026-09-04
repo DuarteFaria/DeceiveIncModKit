@@ -129,5 +129,28 @@ class VaultAssaultSourceTests(unittest.TestCase):
         hide = cleanup.index("npc:SetActorHiddenInGame(true)")
         self.assertLess(ai_gate, hide)
 
+    def test_npc_cleanup_is_batched_off_the_round_flow(self):
+        self.assertIn("local AMBIENT_NPC_CLEANUP_BATCH = 2", self.source)
+        self.assertIn(
+            "if attempted >= AMBIENT_NPC_CLEANUP_BATCH then break end",
+            self.source)
+        self.assertIn("assault_npc_cleanup_cursor", self.source)
+        self.assertIn("assault_npc_cleanup_cursor = last_index + 1",
+                      self.source)
+        tick_start = self.source.index("vault_assault_tick = function()")
+        tick_stop = self.source.index("local function consume_trigger", tick_start)
+        self.assertNotIn("remove_ambient_npcs_tick()",
+                         self.source[tick_start:tick_stop])
+        config = self.source.index("pcall(load_config)")
+        self.assertIn("LoopAsync(100, function()", self.source[config:])
+
+    def test_players_are_prepared_before_vault_phase_advance(self):
+        start = self.source.index("vault_assault_tick = function()")
+        stop = self.source.index("if phase >= PHASE_BY_NAME.RESULT_SCREEN", start)
+        locked = self.source[start:stop]
+        prepare = locked.index("prepare_assault_spies(spies, pickup_source)")
+        advance = locked.index("game_state:AdvancePhase(true)")
+        self.assertLess(prepare, advance)
+
 if __name__ == "__main__":
     unittest.main()

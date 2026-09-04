@@ -128,8 +128,12 @@ local assault_timeout_advanced = false
 local assault_illegal_carrier = nil
 local assault_illegal_remove_at = 0
 local assault_ambient_npcs_removed = 0
+local assault_guard_weapons_neutralized = 0
+local assault_last_npc_cleanup_log = 0
+local assault_npc_cleanup_cursor = 1
 local assault_npc_cleanup_error = nil
 local assault_quarantined_npcs = {}
+local AMBIENT_NPC_CLEANUP_BATCH = 2
 
 -- ESpyGamePhase (CXXHeaderDump, build 24975521)
 local PHASE_NAMES = {
@@ -627,49 +631,48 @@ local function remove_ambient_npcs_tick()
                " live population source(s)")
     end
 
-    -- Snapshot the manager-owned population before mutating actor state.
-    local targets = {}
-    local seen = {}
+    -- Use a numeric cursor into the stable manager-owned population. Rewalking
+    -- every already-quarantined UObject on each batch was quadratic and caused
+    -- the same startup hitch this batching is intended to remove.
+    local population
     for i = 1, #managers do
         local manager = managers[i]
         if is_live(manager) then
-            local population
             pcall(function() population = manager.AllNPCs end)
-            if population then
-                local count = 0
-                pcall(function() count = #population end)
-                for j = 1, count do
-                    local npc
-                    pcall(function() npc = unwrap(population[j]) end)
-                    if npc ~= nil and is_live(npc) then
-                        local key = full(npc)
-                        if not seen[key] then
-                            seen[key] = true
-                            targets[#targets + 1] = npc
-                        end
-                    end
-                end
-            end
+            if population ~= nil then break end
         end
     end
+    if population == nil then return end
+
+    local population_count = 0
+    pcall(function() population_count = #population end)
+    if assault_npc_cleanup_cursor > population_count then return end
+
+    local targets = {}
+    local last_index = math.min(
+        population_count,
+        assault_npc_cleanup_cursor + AMBIENT_NPC_CLEANUP_BATCH - 1)
+    for i = assault_npc_cleanup_cursor, last_index do
+        local npc
+        pcall(function() npc = unwrap(population[i]) end)
+        if npc ~= nil and is_live(npc) then targets[#targets + 1] = npc end
+    end
+    assault_npc_cleanup_cursor = last_index + 1
 
     local removed = 0
     local neutralized_weapons = 0
     local failed = 0
     local first_error = nil
+    local attempted = 0
     for i = 1, #targets do
         local npc = targets[i]
         local key = full(npc)
-        -- Recheck even after quarantine: a guard weapon can be created by a
-        -- delayed callback after the NPC itself was hidden.
-        local weapon_ok, weapon_count, weapon_err =
-            neutralize_ambient_npc_weapons(npc)
-        neutralized_weapons = neutralized_weapons + weapon_count
-        if not weapon_ok then
-            failed = failed + 1
-            first_error = first_error or weapon_err
-        end
         if is_live(npc) and not assault_quarantined_npcs[key] then
+            if attempted >= AMBIENT_NPC_CLEANUP_BATCH then break end
+            attempted = attempted + 1
+            local weapon_ok, weapon_count, weapon_err =
+                neutralize_ambient_npc_weapons(npc)
+            neutralized_weapons = neutralized_weapons + weapon_count
             local ai_ok, ai_err = stop_ambient_npc_ai(npc)
             local hide_ok, hide_err = false, nil
             local collision_ok, collision_err = false, nil
@@ -693,19 +696,27 @@ local function remove_ambient_npcs_tick()
             else
                 failed = failed + 1
                 first_error = first_error or describe_error(
-                    ai_err or hide_err or collision_err or tick_err or net_err)
+                    weapon_err or ai_err or hide_err or collision_err or
+                    tick_err or net_err)
             end
         end
     end
 
     if removed > 0 then
         assault_ambient_npcs_removed = assault_ambient_npcs_removed + removed
-        append("ambient NPC cleanup: AI-stopped/quarantined=" .. removed ..
-               " total=" .. assault_ambient_npcs_removed ..
-               " (Spy agents and player bots untouched)")
-    end
-    if neutralized_weapons > 0 and removed > 0 then
-        append("ambient guard weapons neutralized=" .. neutralized_weapons)
+        assault_guard_weapons_neutralized =
+            assault_guard_weapons_neutralized + neutralized_weapons
+        local remaining = math.max(
+            0, population_count - assault_npc_cleanup_cursor + 1)
+        if assault_ambient_npcs_removed - assault_last_npc_cleanup_log >= 25 or
+           remaining == 0 then
+            assault_last_npc_cleanup_log = assault_ambient_npcs_removed
+            append("ambient NPC cleanup progress: quarantined=" ..
+                   assault_ambient_npcs_removed .. " remaining=" .. remaining ..
+                   " guard_weapons_neutralized=" ..
+                   assault_guard_weapons_neutralized ..
+                   " (Spy agents and player bots untouched)")
+        end
     end
     if failed > 0 then
         local message = tostring(failed) .. " actor(s): " .. tostring(first_error)
@@ -741,6 +752,9 @@ local function reset_vault_assault_state()
     assault_illegal_carrier = nil
     assault_illegal_remove_at = 0
     assault_ambient_npcs_removed = 0
+    assault_guard_weapons_neutralized = 0
+    assault_last_npc_cleanup_log = 0
+    assault_npc_cleanup_cursor = 1
     assault_npc_cleanup_error = nil
     assault_quarantined_npcs = {}
 end
@@ -1681,7 +1695,6 @@ end
 -- their stock loadouts. Extraction and its result stay entirely stock.
 vault_assault_tick = function()
     if not armed then return end
-    remove_ambient_npcs_tick()
     local game_state = find_live_game_state()
     if game_state == nil then return end
     local phase = current_phase(game_state)
@@ -1698,6 +1711,16 @@ vault_assault_tick = function()
             return
         end
         if advance_attempted then return end
+        -- Prepare the round before releasing VAULT_LOCKED. This prevents a
+        -- player from receiving their loadout/teleport one tick after the live
+        -- phase has already begun.
+        if not resolve_assault_factions(spies) then
+            append("vault assault waiting for two populated factions; spies=" ..
+                   #spies)
+            return
+        end
+        local pickup_source = find_objective_pickup_source()
+        prepare_assault_spies(spies, pickup_source)
         advance_attempted = true
         local ok, err = pcall(function() game_state:AdvancePhase(true) end)
         append("vault assault AdvancePhase(true) at VAULT_LOCKED spies=" ..
@@ -2526,6 +2549,16 @@ if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
                tostring(changed))
     end
 end
+
+-- Ambient quarantine uses comparatively expensive reflected component calls.
+-- Keep it off the round-flow loop and process only a couple of actors at a time
+-- so player staging, loadout, timers, and objective state stay responsive.
+LoopAsync(100, function()
+    if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
+        pcall(remove_ambient_npcs_tick)
+    end
+    return false
+end)
 
 -- Do not RegisterHook the global interaction/condition UFunctions here. They
 -- execute at very high frequency during intro and traversing UObject state from

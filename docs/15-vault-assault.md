@@ -47,7 +47,9 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
 - Ambient spawn-data and live manager counts are forced to zero during map load.
   Any NPCs that win that startup race have their AI stopped and are hidden; guard
   hitscan and melee damage is also zeroed so a queued shot cannot come from an
-  invisible actor. The five player-bot agents remain in the Trio slots.
+  invisible actor. Cleanup is processed in small background batches so it cannot
+  delay player staging or phase changes. The five player-bot agents remain in
+  the Trio slots.
 - When `DisableSuspicion=1`, every live agent (human or bot) has the underlying
   stamina drain and NPC suspicion checks disabled, stamina kept full, and any
   suspicious state cleared by the 10 Hz gameplay authority loop. The
