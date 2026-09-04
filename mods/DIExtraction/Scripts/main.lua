@@ -146,6 +146,21 @@ local PHASE_NAMES = {
 local PHASE_BY_NAME = {}
 for value, name in pairs(PHASE_NAMES) do PHASE_BY_NAME[name] = value end
 
+-- EMatchResult. UE4SS returns this replicated enum as either its integer value
+-- or a string such as "EMatchResult::MissionFailed_TimeOut" depending on the
+-- reflection path, so never assume tonumber() can read it.
+local MATCH_RESULT_NAMES = {
+    [0] = "Invalid",
+    [1] = "MissionSucess_ObjectiveExtracted",
+    [2] = "MissionSucess_LastManStanding",
+    [3] = "MissionFailed_NoAgentsLeft",
+    [4] = "MissionFailed_TimeOut",
+}
+local MATCH_RESULT_BY_NAME = {}
+for value, name in pairs(MATCH_RESULT_NAMES) do
+    MATCH_RESULT_BY_NAME[name] = value
+end
+
 -- armed-mode state. Plain Lua values only (string/bool/number) -- never a
 -- UObject wrapper. carrier_filter is a case-insensitive player-name substring;
 -- nil designates the first human connection.
@@ -261,6 +276,24 @@ end
 local function phase_label(phase)
     if phase == nil then return "<unknown>" end
     return (PHASE_NAMES[phase] or "?") .. "(" .. tostring(phase) .. ")"
+end
+
+local function current_match_result(game_state)
+    local raw
+    if game_state == nil or
+       not pcall(function() raw = unwrap(game_state.MatchResult) end) then
+        return nil
+    end
+    if raw == nil then return nil end
+    if type(raw) == "number" then return raw end
+    local number = tonumber(raw)
+    if number ~= nil then return number end
+    local text
+    pcall(function() text = tostring(raw:ToString()) end)
+    if text == nil then pcall(function() text = tostring(raw) end) end
+    if type(text) ~= "string" then return nil end
+    local bare = text:gsub("^EMatchResult::", "")
+    return MATCH_RESULT_BY_NAME[bare] or tonumber(text:match("(-?%d+)$"))
 end
 
 local function player_name_of(controller)
@@ -1819,19 +1852,26 @@ end
 
 local function mark_defender_winners()
     if assault_defender_faction == nil then return end
-    local changed = 0
+    local updated, verified = 0, 0
     for _, state in ipairs(find_live_player_states()) do
         local faction = number_property(state, "FactionID")
         if faction ~= nil then
             local won = faction == assault_defender_faction
-            local ok = pcall(function() state.bWon = won end)
-            if ok then changed = changed + 1 end
+            local ok = pcall(function()
+                state.bWon = won
+                state:ForceNetUpdate()
+            end)
+            if ok then updated = updated + 1 end
+            local after
+            local read_ok = pcall(function() after = unwrap(state.bWon) end)
+            if read_ok and after == won then verified = verified + 1 end
         end
     end
     if not assault_timeout_declared then
         assault_timeout_declared = true
-        append("VAULT ASSAULT DEFENDER WIN: objective timer expired; marked " ..
-               changed .. " player state(s), defender faction=" ..
+        append("VAULT ASSAULT DEFENDER WIN: objective timer expired; updated=" ..
+               updated .. " verified=" .. verified ..
+               " player state(s), defender faction=" ..
                tostring(assault_defender_faction))
     end
 end
@@ -1879,7 +1919,8 @@ vault_assault_tick = function()
     end
 
     if phase >= PHASE_BY_NAME.RESULT_SCREEN then
-        if assault_timeout_declared or number_property(game_state, "MatchResult") == 4 then
+        local result = current_match_result(game_state)
+        if assault_timeout_declared or result == 4 then
             mark_defender_winners()
         end
         return
@@ -1963,6 +2004,11 @@ vault_assault_tick = function()
             if not assault_timeout_advanced then
                 assault_timeout_advanced = true
                 local ok, err = pcall(function() game_state:AdvancePhase(true) end)
+                -- AdvancePhase computes the stock timeout result and may
+                -- rewrite bWon. Reassert the asymmetric winner in the same
+                -- server frame so result-screen replication cannot capture
+                -- the transient stock all-lost state.
+                mark_defender_winners()
                 append("vault assault timeout AdvancePhase(true) at " ..
                        phase_label(phase) .. " ok=" .. tostring(ok) ..
                        " error=" .. tostring(err))

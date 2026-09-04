@@ -182,5 +182,37 @@ class VaultAssaultSourceTests(unittest.TestCase):
         advance = locked.index("game_state:AdvancePhase(true)")
         self.assertLess(prepare, advance)
 
+    def test_textual_timeout_result_awards_defender_win(self):
+        result_start = self.source.index("local function current_match_result")
+        result_stop = self.source.index("local function player_name_of", result_start)
+        result = self.source[result_start:result_stop]
+        self.assertIn('text:gsub("^EMatchResult::", "")', result)
+        self.assertIn("MATCH_RESULT_BY_NAME[bare]", result)
+
+        tick_start = self.source.index("vault_assault_tick = function()")
+        tick_stop = self.source.index("if phase < PHASE_BY_NAME.VAULT_UNLOCKED",
+                                      tick_start)
+        result_screen = self.source[tick_start:tick_stop]
+        self.assertIn("local result = current_match_result(game_state)",
+                      result_screen)
+        self.assertIn("assault_timeout_declared or result == 4", result_screen)
+        self.assertIn("mark_defender_winners()", result_screen)
+
+    def test_defender_winner_state_is_replicated_and_verified(self):
+        start = self.source.index("local function mark_defender_winners")
+        stop = self.source.index("-- Asymmetric prototype", start)
+        winner = self.source[start:stop]
+        self.assertIn("state.bWon = won", winner)
+        self.assertIn("state:ForceNetUpdate()", winner)
+        self.assertIn("after = unwrap(state.bWon)", winner)
+        self.assertIn("after == won", winner)
+
+        timeout = self.source.index("if not assault_timeout_advanced then")
+        advance = self.source.index("game_state:AdvancePhase(true)", timeout)
+        reassert = self.source.index("mark_defender_winners()", advance)
+        log = self.source.index('append("vault assault timeout', advance)
+        self.assertLess(advance, reassert)
+        self.assertLess(reassert, log)
+
 if __name__ == "__main__":
     unittest.main()

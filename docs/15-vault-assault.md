@@ -75,7 +75,9 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   remains as a fallback if a game-owned grant bypasses interaction validation.
 - Attacker extraction uses the untouched stock extraction and victory flow.
 - At objective timeout, defender player states are marked as winners before the
-  stock timeout transition.
+  stock timeout transition. The result-screen fallback recognizes both numeric
+  and reflected enum-text timeout results, then refreshes and verifies the
+  replicated winner flag for every player state.
 
 `DIExtraction.log` records role assignment, each loadout grant, defender staging,
 timer writes, valid/invalid pickups, and the timeout winner decision.
@@ -134,9 +136,9 @@ replicated scalar/undercover state and deliberately does not invoke the stock
 - The game still owns elimination. A full team wipe may trigger its stock
   last-man-standing result before the objective timer, and overriding that rule
   needs a deeper game-mode hook.
-- Directly writing `DIPlayerState.bWon` is the best reflected route for timeout
-  attribution, but its exact result-screen presentation needs the first live
-  timeout test.
+- Timeout keeps the stock `MissionFailed_TimeOut` match reason while setting
+  `DIPlayerState.bWon` for the defending faction, which makes that timeout a
+  defender victory rather than changing it into an objective-extraction result.
 - Global native interaction hooks are not used: a live test crashed UE4SS when
   condition traffic increased during spy intro. Defender blocking instead
   reads the live objective pickup source's `InteractableType` (the objective
