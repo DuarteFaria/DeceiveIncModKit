@@ -1,5 +1,5 @@
 {
-  "description": "Carrier-extraction mode: normal Solo match vs bots; trigger-extraction fast-forwards VAULT_LOCKED->VAULT_UNLOCKED and teleports the designated carrier to the briefcase, then the stock endgame (grab, hunt, extract) plays out.",
+  "description": "Carrier-extraction mode: normal Solo match vs bots; trigger-extraction fast-forwards VAULT_LOCKED->VAULT_UNLOCKED, teleports the designated carrier onto the briefcase and gathers every other spy (humans and bots) in a ring around it, so the match opens as an instant brawl over the case. Everyone is kitted out first, and the bots are held frozen until the human players have finished loading in.",
   "mods": {
     "DIConfig": true,
     "DIExtraction": true
@@ -12,7 +12,10 @@
     "Extraction": {
       "AutoArm": 1,
       "AutoLoadout": 1,
-      "Disguise": "purple"
+      "GatherAll": 1,
+      "FreezeBots": 1,
+      "FreezeGraceSeconds": 5,
+      "Disguise": "orange"
     }
   },
   "tripwire": {

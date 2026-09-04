@@ -82,10 +82,31 @@ local desired_disguise = nil
 -- there instead of to the local below.
 local apply_disguise
 local grant_full_resources
+local grant_full_resources_pawn
+local grant_full_resources_all
 -- Set from DIConfig.ini; kitting the carrier out is a once-per-match action, so
 -- it is latched rather than repeated every tick.
 local auto_loadout = false
 local carrier_prepared = false
+-- Instant-brawl gathering: when the vault opens, every spy in the level --
+-- humans and bots alike -- is dropped in a ring around the objective, so the
+-- match resolves as one fight over the case instead of a hunt across the map.
+-- [Extraction] GatherAll = 0 restores the carrier-only delivery.
+local gather_all = true
+local gather_done = false
+-- Bot freeze. The fast-forward opens the vault about ten seconds into the
+-- match, which can be before a human client has finished loading in -- they
+-- then arrive to bots already shooting each other. While any human is still
+-- loading, every bot spy is held still and disarmed, and the phase advance
+-- waits with them. [Extraction] FreezeBots = 0 turns it off.
+local freeze_bots = true
+local freeze_grace = 5           -- seconds of calm after the last human is ready
+local freeze_max_wait = 30       -- give up waiting and play anyway after this
+local bots_released = false
+local freeze_wait_started = nil  -- os.time() when the hold began
+local humans_ready_since = nil   -- os.time() when every human first read ready
+local frozen_modes = {}          -- pawn full name -> EMovementMode before freeze
+local freeze_logged = nil        -- last line logged, so the hold does not spam
 
 -- ESpyGamePhase (CXXHeaderDump, build 24975521)
 local PHASE_NAMES = {
@@ -106,6 +127,15 @@ local last_logged_phase = nil
 local teleport_attempts = 0
 local TELEPORT_MAX_ATTEMPTS = 12
 
+-- NOTE ON THREADS, paid for in four crashed servers. LoopAsync runs its
+-- callback on its OWN thread, so every UFunction here is a cross-thread call
+-- into the engine. `ExecuteInGameThread` exists and looks like the fix, but
+-- using it for PART of a tick is worse than not using it at all: the closure
+-- runs Lua on the game thread while the tick is still running Lua on the async
+-- thread, two threads enter one lua_State, and the server dies with the whole
+-- callstack inside ue4ss.dll. Everything in this mod therefore runs on the one
+-- async thread, and the operations that cannot survive that (see the bot
+-- loadout below) are simply not performed.
 local function append(line)
     local fh = io.open(OUT, "a")
     if fh then
@@ -167,7 +197,24 @@ local function scalar_property(object, name)
     return value
 end
 
+-- UE4SS hands back a Lua wrapper even when the underlying UObject pointer is
+-- NULL, so `~= nil` is not a validity test -- and calling a UFunction on one of
+-- those exits the server with status 3 and NOTHING in any log. That is exactly
+-- how the everyone-loadout died on its first bot: a bot's PlayerState wrapper
+-- read non-nil, GetPlayerName() went through it, and the process was gone
+-- before the next line could be written. Anything that came from a property
+-- read goes through here before it is touched.
+local function valid(object)
+    if object == nil then return false end
+    local ok, result = pcall(function() return object:IsValid() end)
+    if ok and type(result) == "boolean" then return result end
+    -- No IsValid on this wrapper: fall back to whether it can name itself.
+    local name = full(object)
+    return name ~= "<nil>" and name ~= "<unrenderable>"
+end
+
 local function is_live(object)
+    if not valid(object) then return false end
     local name = full(object)
     return name ~= "<nil>" and name ~= "<unrenderable>" and
            not name:find("Default__", 1, true)
@@ -212,11 +259,21 @@ local function phase_label(phase)
     return (PHASE_NAMES[phase] or "?") .. "(" .. tostring(phase) .. ")"
 end
 
+-- The short object name, e.g. "BPSpy_Chavez_Main_V1_C_2147472725". Costs no
+-- UFunction call, so it is always safe to log even when nothing else about an
+-- object can be trusted.
+local function short_name(object)
+    local name = full(object)
+    return name:match("([^.]+)$") or name
+end
+
 local function player_name_of(controller)
     local name
     pcall(function()
         local state = unwrap(controller.PlayerState)
-        if state then name = tostring(state:GetPlayerName():ToString()) end
+        if valid(state) then
+            name = tostring(state:GetPlayerName():ToString())
+        end
     end)
     return name
 end
@@ -425,7 +482,158 @@ vector_text = function(vec)
     return string.format("(%.0f, %.0f, %.0f)", x, y, z)
 end
 
-local function teleport_carrier_to_briefcase()
+-- Lua 5.3 folded math.atan2 into a two-argument math.atan, and UE4SS has
+-- shipped runtimes on both sides of that change.
+local function atan2(y, x)
+    if math.atan2 then return math.atan2(y, x) end
+    return math.atan(y, x)
+end
+
+-- Candidate destinations for one pawn, relative to the objective. Slot 0 is the
+-- carrier: straight above the case, so they drop onto it and grab it through
+-- the game's own pickup. Every other slot owns its own arc of a ring around it.
+-- The per-slot arc matters because K2_TeleportTo sweeps for collision and
+-- refuses a spot another pawn already occupies -- without it every gathered spy
+-- walks the same candidate list and the tail of the lobby lands ever further
+-- out, or not at all.
+local function destination_offsets(slot, slots)
+    local offsets = {}
+    if slot == 0 then
+        offsets[1] = { 0, 0, 300 }
+        offsets[2] = { 0, 0, 500 }
+    end
+    local base = 0.0
+    if slot > 0 and slots > 0 then
+        base = 2 * math.pi * (slot - 1) / slots
+    end
+    for _, radius in ipairs({ 350, 550, 800 }) do
+        for _, spin in ipairs({ 0, 0.3, -0.3, 0.7, -0.7, math.pi }) do
+            local angle = base + spin
+            offsets[#offsets + 1] = { math.cos(angle) * radius,
+                                      math.sin(angle) * radius, 250 }
+        end
+    end
+    return offsets
+end
+
+-- Move one pawn to the first candidate the engine accepts. A single fixed
+-- offset once put the carrier inside the Diamondspire pedestal and failed
+-- forever, hence the spread. Yaw faces the objective, so everyone arrives
+-- looking at the case -- and at each other.
+local function place_pawn(pawn, location, offsets)
+    local last_error = nil
+    for _, offset in ipairs(offsets) do
+        local dest = { X = location.X + offset[1],
+                       Y = location.Y + offset[2],
+                       Z = location.Z + offset[3] }
+        local yaw = 180.0
+        if offset[1] ~= 0 or offset[2] ~= 0 then
+            yaw = atan2(-offset[2], -offset[1]) * 180.0 / math.pi
+        end
+        local moved = false
+        local ok, err = pcall(function()
+            moved = pawn:K2_TeleportTo(dest,
+                                       { Pitch = 0.0, Yaw = yaw, Roll = 0.0 })
+        end)
+        if ok and moved then
+            return true, string.format("(+%.0f,+%.0f,+%.0f)",
+                                       offset[1], offset[2], offset[3])
+        end
+        if not ok then last_error = describe_error(err) end
+    end
+    return false, nil, last_error or "K2_TeleportTo refused every candidate"
+end
+
+-- Every live spy pawn in the level, players and bots alike. Both sources are
+-- swept and merged by full name because each covers the other's blind spot: the
+-- ASpy sweep catches a bot whose controller class is not the one we enumerate,
+-- and the controller sweep catches a player pawn should the class lookup come
+-- back empty. Missing a pawn here means one spy is left across the map while
+-- everyone else brawls, so neither source is trusted alone.
+local function live_spy_pawns()
+    local pawns, seen = {}, {}
+    local function add(pawn)
+        if pawn == nil or not is_live(pawn) then return end
+        local id = full(pawn)
+        if seen[id] then return end
+        seen[id] = true
+        pawns[#pawns + 1] = pawn
+    end
+
+    local found
+    pcall(function() found = FindAllOf("Spy") end)
+    if found then
+        for i = 1, #found do add(found[i]) end
+    end
+
+    local controllers
+    pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
+    if controllers then
+        for i = 1, #controllers do
+            if is_live(controllers[i]) then
+                local pawn
+                pcall(function() pawn = unwrap(controllers[i].Pawn) end)
+                add(pawn)
+            end
+        end
+    end
+    return pawns
+end
+
+-- The game's own per-pawn bot flag. Unlike the controller-side NetConnection
+-- test this reads straight off the pawn in hand -- and bots turned out not to
+-- be DeceiveIncPlayerController instances at all, so there is often no player
+-- controller to ask about them in the first place.
+local function is_bot_spy(pawn)
+    local bot = false
+    pcall(function() bot = (pawn.bIsBot == true) end)
+    return bot
+end
+
+-- "PlayerName (bot)" for a log line. The name comes off the pawn's own
+-- PlayerState: the first gathered run named every bot by its raw object path
+-- because it looked them up through the player controllers, which bots do not
+-- have.
+local function spy_label(pawn)
+    local name
+    pcall(function()
+        local state = unwrap(pawn.PlayerState)
+        if valid(state) then
+            name = tostring(state:GetPlayerName():ToString())
+        end
+    end)
+    if name == nil or name == "" then name = short_name(pawn) end
+    return name .. (is_bot_spy(pawn) and " (bot)" or " (human)")
+end
+
+-- Drop everyone who is not the carrier into the ring. Best effort by design:
+-- a spy the sweep cannot fit is left where they are and logged, because the
+-- match is still playable with one straggler and is not playable with a body
+-- shoved through the floor.
+local function gather_other_spies(carrier_pawn, location)
+    local carrier_id = carrier_pawn and full(carrier_pawn) or nil
+    local others = {}
+    for _, pawn in ipairs(live_spy_pawns()) do
+        if full(pawn) ~= carrier_id then others[#others + 1] = pawn end
+    end
+    append("---- gathering " .. #others .. " other spy pawn(s) to the objective ----")
+    local placed = 0
+    for index, pawn in ipairs(others) do
+        local ok, used, err =
+            place_pawn(pawn, location, destination_offsets(index, #others))
+        if ok then placed = placed + 1 end
+        append("  gather " .. spy_label(pawn) ..
+               " ok=" .. tostring(ok) ..
+               (ok and (" offset=" .. tostring(used))
+                    or (" error=" .. tostring(err))))
+    end
+    append("---- gather complete: " .. placed .. "/" .. #others .. " placed ----")
+end
+
+-- Deliver the carrier onto the briefcase and, once per match, pull every other
+-- spy in around it. The carrier is what gates the mode's handoff; the gather is
+-- latched separately so a carrier the sweep cannot place still gets a brawl.
+local function deliver_carrier_and_gather()
     local controller, why = find_carrier_controller()
     if controller == nil then return false, why end
     local pawn
@@ -456,48 +664,133 @@ local function teleport_carrier_to_briefcase()
                    " is at the carrier's own position; not a world objective"
         end
     end
-    -- K2_TeleportTo sweeps for collision and returns false if the destination
-    -- overlaps geometry. A single fixed offset put the carrier inside the
-    -- pedestal on Diamondspire and failed forever, so try a spread of
-    -- candidates: straight above first (drop onto the objective), then a
-    -- widening ring at two heights. First one the engine accepts wins.
-    local offsets = { { 0, 0, 300 }, { 0, 0, 500 } }
-    for _, radius in ipairs({ 150, 300, 500 }) do
-        for _, dir in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
-                               { 0.7, 0.7 }, { -0.7, 0.7 },
-                               { 0.7, -0.7 }, { -0.7, -0.7 } }) do
-            offsets[#offsets + 1] =
-                { dir[1] * radius, dir[2] * radius, 250 }
-        end
-    end
 
-    local moved, ok, err, used = false, true, nil, nil
-    for _, offset in ipairs(offsets) do
-        local dest = { X = location.X + offset[1],
-                       Y = location.Y + offset[2],
-                       Z = location.Z + offset[3] }
-        local attempt_ok, attempt_err = pcall(function()
-            moved = pawn:K2_TeleportTo(dest,
-                                       { Pitch = 0.0, Yaw = 180.0, Roll = 0.0 })
-        end)
-        ok, err = attempt_ok, attempt_err
-        if attempt_ok and moved then
-            used = string.format("(+%.0f,+%.0f,+%.0f)",
-                                 offset[1], offset[2], offset[3])
-            break
-        end
-        moved = false
-    end
-    append("  teleport offset used=" .. tostring(used) ..
-           " after " .. #offsets .. " candidates")
+    local ok, used, err = place_pawn(pawn, location, destination_offsets(0, 0))
     append("teleport carrier=" .. tostring(player_name_of(controller)) ..
            " pawn=" .. full(pawn) ..
            " target(" .. kind .. ")=" .. full(briefcase) ..
            " at " .. vector_text(location) ..
-           " ok=" .. tostring(ok and moved) .. " error=" .. tostring(err))
+           " ok=" .. tostring(ok) .. " offset=" .. tostring(used) ..
+           " error=" .. tostring(err))
+
+    -- After the carrier, so the spot on the case is claimed before the ring
+    -- fills in around it.
+    if gather_all and not gather_done then
+        gather_done = true
+        pcall(function() gather_other_spies(pawn, location) end)
+    end
+
     if not ok then return false, tostring(err) end
-    if not moved then return false, "K2_TeleportTo returned false (blocked?)" end
     return true, nil
+end
+
+-- How many humans are in, and how many are actually playing.
+-- ADeceiveIncPlayerController.bIsReady is the flag behind the client's own
+-- Server_ClientIsReady RPC, which is the closest thing the server has to "this
+-- player has finished loading"; a live pawn is required alongside it because
+-- ready without a pawn is still not someone who can defend themselves.
+local function humans_ready_state()
+    local controllers
+    pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
+    local total, ready, detail = 0, 0, {}
+    if controllers then
+        for i = 1, #controllers do
+            local controller = controllers[i]
+            if is_live(controller) and is_human(controller) then
+                total = total + 1
+                local flag, pawn = false, nil
+                pcall(function() flag = (controller.bIsReady == true) end)
+                pcall(function() pawn = unwrap(controller.Pawn) end)
+                local deployed = pawn ~= nil and is_live(pawn)
+                if flag and deployed then ready = ready + 1 end
+                detail[#detail + 1] = tostring(player_name_of(controller)) ..
+                    "(ready=" .. tostring(flag) ..
+                    " deployed=" .. tostring(deployed) .. ")"
+            end
+        end
+    end
+    return total, ready, table.concat(detail, " ")
+end
+
+-- Freeze or thaw one bot. Movement goes through the character movement
+-- component's own MOVE_None; the pre-freeze mode is remembered by pawn NAME (a
+-- plain string, never a retained UObject wrapper) so the thaw restores what the
+-- pawn actually had.
+--
+-- There is NO weapon half any more, and both candidates are ruled out by live
+-- runs: `ASpy::AllowWeapon` is client-side ("This is made to work on local
+-- spies only" once per bot per tick), and writing `bWeaponDisabled` left
+-- IsShootingBlocked() reading false every tick of the hold -- a no-op, and a
+-- cross-thread write to a bot pawn, which is the exact category that has been
+-- killing this server. So a frozen bot can still shoot; it just cannot move or
+-- chase, and it cannot reach the objective before the humans do.
+local function set_bot_frozen(pawn, freeze)
+    local id = full(pawn)
+    local move
+    pcall(function() move = unwrap(pawn.CharacterMovement) end)
+    if not is_live(move) then return false end
+    if freeze then
+        if frozen_modes[id] == nil then
+            local mode
+            pcall(function() mode = tonumber(unwrap(move.MovementMode)) end)
+            frozen_modes[id] = mode or 1 -- MOVE_Walking
+        end
+        pcall(function() move:DisableMovement() end)
+    else
+        local mode = frozen_modes[id] or 1
+        if mode == 0 then mode = 1 end -- never restore INTO the frozen mode
+        frozen_modes[id] = nil
+        pcall(function() move:SetMovementMode(mode, 0) end)
+    end
+    return true
+end
+
+local function apply_bot_freeze(freeze)
+    local touched = 0
+    for _, pawn in ipairs(live_spy_pawns()) do
+        if is_bot_spy(pawn) and set_bot_frozen(pawn, freeze) then
+            touched = touched + 1
+        end
+    end
+    return touched
+end
+
+-- Returns true once the bots are free to play. Until then it re-applies the
+-- freeze every tick, because a bot's own movement code will happily set itself
+-- walking again between ticks.
+local function maintain_bot_freeze()
+    if not freeze_bots or bots_released then return true end
+    local now = os.time()
+    freeze_wait_started = freeze_wait_started or now
+    local total, ready, detail = humans_ready_state()
+    if total > 0 and ready == total then
+        humans_ready_since = humans_ready_since or now
+    else
+        humans_ready_since = nil
+    end
+
+    local settled = humans_ready_since ~= nil and
+                    (now - humans_ready_since) >= freeze_grace
+    local timed_out = (now - freeze_wait_started) >= freeze_max_wait
+    if settled or timed_out then
+        bots_released = true
+        local thawed = apply_bot_freeze(false)
+        append("bots released (" ..
+               (settled and ("all " .. total .. " human(s) ready")
+                         or ("timed out after " .. freeze_max_wait .. "s")) ..
+               "): " .. thawed .. " bot(s) thawed")
+        freeze_logged = nil
+        return true
+    end
+
+    local frozen = apply_bot_freeze(true)
+    local line = "holding " .. frozen .. " bot(s) still; humans ready " ..
+                 ready .. "/" .. total .. " " .. detail
+    if line ~= freeze_logged then
+        freeze_logged = line
+        append(line)
+    end
+    return false
 end
 
 -- One armed-mode tick. Reacquires all live state, waits out the stock
@@ -516,8 +809,16 @@ local function extraction_tick()
     end
     if phase == nil then return end
 
+    if phase < PHASE_BY_NAME.POSING_SPY_INTRO then
+        return -- stock lobby flow gets the players spawned first
+    end
+
+    -- From the intro onwards there are bots on the map who will start fighting
+    -- the moment they can. Hold them until the humans are actually in.
+    local bots_ready = maintain_bot_freeze()
+
     if phase < PHASE_BY_NAME.VAULT_LOCKED then
-        return -- stock lobby/intro flow gets the players spawned first
+        return -- stock intro flow still running
     end
 
     if phase == PHASE_BY_NAME.VAULT_LOCKED then
@@ -533,6 +834,10 @@ local function extraction_tick()
             append("holding at VAULT_LOCKED: carrier not deployed yet")
             return
         end
+        -- Opening the vault is what starts the brawl, so it waits on the same
+        -- readiness the freeze does. Otherwise thawed bots would sprint for a
+        -- case whose owner is still on a loading screen.
+        if not bots_ready then return end
         if advance_attempted then return end -- verify on a later tick
         advance_attempted = true
         local ok, err = pcall(function() game_state:AdvancePhase(true) end)
@@ -555,8 +860,17 @@ local function extraction_tick()
             if controller and pawn ~= nil and is_live(pawn) then
                 carrier_prepared = true
                 if auto_loadout then
-                    append("---- auto loadout on vault open ----")
-                    pcall(function() grant_full_resources(controller) end)
+                    -- Everyone in the brawl gets kitted, bots included: a fight
+                    -- the carrier enters with full charges against bots on
+                    -- spawn ammo is not a fight. Carrier-only delivery
+                    -- (GatherAll = 0) keeps the grant carrier-only to match.
+                    if gather_all then
+                        append("---- auto loadout on vault open (everyone) ----")
+                        pcall(grant_full_resources_all)
+                    else
+                        append("---- auto loadout on vault open (carrier) ----")
+                        pcall(function() grant_full_resources(controller) end)
+                    end
                 end
                 if desired_disguise ~= nil then
                     pcall(function()
@@ -566,13 +880,15 @@ local function extraction_tick()
             end
         end
 
-        local ok, why = teleport_carrier_to_briefcase()
+        local ok, why = deliver_carrier_and_gather()
         if not ok then pcall(probe_objective_classes) end
         if ok then
             armed = false
             advance_attempted = false
-            append("carrier delivered to briefcase; mode handoff complete -- " ..
-                   "grab, call extraction, and the stock endgame takes over")
+            append("carrier delivered to briefcase" ..
+                   (gather_all and " and the lobby gathered around it" or "") ..
+                   "; mode handoff complete -- grab, call extraction, and the " ..
+                   "stock endgame takes over")
         else
             -- Retrying is right while the world is still settling, but the
             -- Diamondspire run failed identically every two seconds forever and
@@ -607,12 +923,12 @@ end
 -- spend path sees an impossible value. A max of 0 means this spy/agent does not
 -- use that resource at all (e.g. charges for a gadget they did not equip), and
 -- it is skipped.
-grant_full_resources = function(controller)
-    local name = tostring(player_name_of(controller))
-    local pawn
-    pcall(function() pawn = unwrap(controller.Pawn) end)
+-- The pawn half of the grant. Everything below the controller is the same for
+-- a human and a bot, and only the pawn is common to both -- bots have no
+-- ADeceiveIncPlayerController at all.
+grant_full_resources_pawn = function(pawn, name)
     if pawn == nil or not is_live(pawn) then
-        return false, "no live pawn for " .. name .. " (not deployed?)"
+        return false, "no live pawn for " .. tostring(name) .. " (not deployed?)"
     end
     local resources
     pcall(function() resources = unwrap(pawn.GameplayResourcesComponent) end)
@@ -649,10 +965,18 @@ grant_full_resources = function(controller)
             end
         end
     end
-    append("loadout grant for " .. name .. " pawn=" .. full(pawn) ..
+    append("loadout grant for " .. tostring(name) .. " pawn=" .. full(pawn) ..
            " granted=" .. granted .. " skipped=" .. skipped ..
            " failed=" .. failed)
     return true, nil
+end
+
+-- Controller-shaped entry point, for the marker commands that resolve a player
+-- by name.
+grant_full_resources = function(controller)
+    local pawn
+    pcall(function() pawn = unwrap(controller.Pawn) end)
+    return grant_full_resources_pawn(pawn, player_name_of(controller))
 end
 
 -- ASpy::CheatDisguiseGiveSecurityLevelSrv(ESecurityLevel) is the game's own
@@ -913,6 +1237,53 @@ local function consume_rescue()
            ") ok=" .. tostring(ok and moved) .. " error=" .. tostring(err))
 end
 
+-- Fill every live player in the match, humans and bots alike. Shared by the
+-- `grant-loadout all` marker and by the vault-open grant, so the two can never
+-- disagree about who counts as "everyone".
+-- Fill every live HUMAN in the match.
+--
+-- Bots are deliberately excluded, and this is not caution -- it is measured.
+-- `AddResource` on a bot kills the server outright: the bots' own weapon code
+-- decrements the same Ammo counter on the game thread while this runs on the
+-- async one, and the two racing exits the process (status-3, no callstack,
+-- immediately after the engine logged the add). Handing the grant to
+-- ExecuteInGameThread to fix that made it worse, not better -- see the thread
+-- note at the top of this file. The game already kits bots at spawn (ammo,
+-- charges, intel), so the practical cost of skipping them is small.
+--
+-- Doing this properly needs the native ProcessEvent invoker (docs/11), not Lua.
+grant_full_resources_all = function()
+    local pawns = live_spy_pawns()
+    if #pawns == 0 then
+        append("loadout grant: no live spies in world")
+        return 0
+    end
+    -- One live run swept NINE spies for eight players. Until that is explained,
+    -- name them: a stale pawn nobody is driving is a plausible source of the
+    -- next unexplained crash.
+    local names = {}
+    for _, pawn in ipairs(pawns) do names[#names + 1] = short_name(pawn) end
+    append("loadout sweep found " .. #pawns .. " spies: " ..
+           table.concat(names, ", "))
+    local done, skipped = 0, 0
+    for _, pawn in ipairs(pawns) do
+        -- Logged before the pawn is touched, not after: a status-3 exit writes
+        -- nothing, so the last name in the log is the pawn that killed it.
+        append("  loadout target " .. spy_label(pawn))
+        if is_bot_spy(pawn) then
+            skipped = skipped + 1
+            append("    skipped: bots cannot take AddResource on this build")
+        else
+            local ok, why = grant_full_resources_pawn(pawn, spy_label(pawn))
+            if ok then done = done + 1
+            else append("loadout skip: " .. tostring(why)) end
+        end
+    end
+    append("loadout grant complete for " .. done .. " human(s), " ..
+           skipped .. " bot(s) skipped")
+    return done
+end
+
 local function consume_loadout()
     local fh = io.open(LOADOUT, "r")
     if fh == nil then return end
@@ -923,22 +1294,7 @@ local function consume_loadout()
 
     append("---- loadout grant requested target=" .. tostring(payload) .. " ----")
     if payload == "all" then
-        local controllers
-        pcall(function() controllers = FindAllOf("DeceiveIncPlayerController") end)
-        if not controllers then
-            append("loadout grant: no controllers in world")
-            return
-        end
-        local done = 0
-        for i = 1, #controllers do
-            local controller = controllers[i]
-            if is_live(controller) then
-                local ok, why = grant_full_resources(controller)
-                if ok then done = done + 1
-                else append("loadout skip: " .. tostring(why)) end
-            end
-        end
-        append("loadout grant complete for " .. done .. " player(s)")
+        grant_full_resources_all()
         return
     end
 
@@ -1184,6 +1540,12 @@ local function consume_trigger()
     advance_attempted = false
     teleport_attempts = 0
     carrier_prepared = false
+    gather_done = false
+    bots_released = false
+    freeze_wait_started = nil
+    humans_ready_since = nil
+    frozen_modes = {}
+    freeze_logged = nil
     last_logged_phase = nil
     append("extraction mode armed; carrier_filter=" .. tostring(carrier_filter))
     -- Name the designated player immediately when one is already connected, so
@@ -1247,6 +1609,12 @@ RegisterHook("/Script/Engine.GameModeBase:StartPlay", function()
         advance_attempted = false
         teleport_attempts = 0
         carrier_prepared = false
+        gather_done = false
+        bots_released = false
+        freeze_wait_started = nil
+        humans_ready_since = nil
+        frozen_modes = {}
+        freeze_logged = nil
         last_logged_phase = nil
         append("map (re)started; armed extraction mode reset to waiting")
     end
@@ -1282,6 +1650,12 @@ local function load_config()
         advance_attempted = false
         teleport_attempts = 0
         carrier_prepared = false
+        gather_done = false
+        bots_released = false
+        freeze_wait_started = nil
+        humans_ready_since = nil
+        frozen_modes = {}
+        freeze_logged = nil
         last_logged_phase = nil
         append("auto-armed from DIConfig.ini [Extraction] AutoArm")
     end
@@ -1289,6 +1663,28 @@ local function load_config()
        (settings.autoloadout or ""):lower() == "true" then
         auto_loadout = true
         append("auto-loadout enabled from config")
+    end
+    -- Default on: gathering the lobby is what makes this an instant brawl.
+    -- Only an explicit 0/false turns it back into the carrier-only delivery.
+    if settings.gatherall ~= nil then
+        local value = settings.gatherall:lower()
+        gather_all = not (value == "0" or value == "false" or value == "off")
+        append("gather-all from config: " .. tostring(gather_all))
+    end
+    if settings.freezebots ~= nil then
+        local value = settings.freezebots:lower()
+        freeze_bots = not (value == "0" or value == "false" or value == "off")
+        append("bot freeze from config: " .. tostring(freeze_bots))
+    end
+    local grace = tonumber(settings.freezegraceseconds or "")
+    if grace and grace >= 0 and grace <= 60 then
+        freeze_grace = grace
+        append("bot freeze grace from config: " .. grace .. "s")
+    end
+    local max_wait = tonumber(settings.freezemaxwaitseconds or "")
+    if max_wait and max_wait >= 5 and max_wait <= 300 then
+        freeze_max_wait = max_wait
+        append("bot freeze max wait from config: " .. max_wait .. "s")
     end
     if settings.carrier and settings.carrier ~= "" then
         carrier_filter = settings.carrier
