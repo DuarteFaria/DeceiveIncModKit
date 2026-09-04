@@ -50,7 +50,7 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   invisible actor. The five player-bot agents remain in the Trio slots.
 - When `DisableSuspicion=1`, every live agent (human or bot) has the underlying
   stamina drain and NPC suspicion checks disabled, stamina kept full, and any
-  suspicious state cleared by the existing once-per-second mode tick. The
+  suspicious state cleared by the 10 Hz gameplay authority loop. The
   replicated undercover flag is also cleared with `DisableCover=1`. Stale intro
   invulnerability and disguise-shield modifiers are removed after deployment so
   bots and humans use the same damage path. All reflected controls are read back

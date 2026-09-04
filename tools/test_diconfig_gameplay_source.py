@@ -60,8 +60,13 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
         self.assertIn('FindAllOf("Spy")', self.source)
         self.assertIn("local is_active, game_state = active_match()", self.source)
         self.assertIn("if not is_active then return end", self.source)
-        self.assertIn("LoopAsync(1000, function()", self.source)
+        self.assertIn("LoopAsync(100, function()", self.source)
         self.assertIn("pcall(apply_gameplay)", self.source)
+
+    def test_damage_modifier_cleanup_is_rate_limited(self):
+        self.assertIn("gameplay_last_combat_cleanup", self.source)
+        self.assertIn("run_modifier_cleanup", self.source)
+        self.assertIn("gameplay_last_combat_cleanup[key] = now", self.source)
 
     def test_settings_are_loaded_as_general_diconfig_values(self):
         self.assertIn("enabled(cfg.DisableSuspicion)", self.source)

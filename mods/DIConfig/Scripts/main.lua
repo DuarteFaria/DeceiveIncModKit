@@ -126,6 +126,7 @@ local disable_suspicion = false
 local disable_cover = false
 local gameplay_ready = {}
 local gameplay_last_error = {}
+local gameplay_last_combat_cleanup = {}
 
 local function suppress_suspicion(pawn)
     local changed = false
@@ -239,6 +240,9 @@ local function remove_combat_spawn_protection(pawn, game_state)
     if health == nil then return false, "health component unavailable" end
 
     local changed = false
+    local key = full(pawn)
+    local now = os.time()
+    local run_modifier_cleanup = gameplay_last_combat_cleanup[key] ~= now
     local ok, err = pcall(function()
         if unwrap(health.bIgnoreDamage) == true then
             health.bIgnoreDamage = false
@@ -248,24 +252,32 @@ local function remove_combat_spawn_protection(pawn, game_state)
         -- The stock intro phase owns this exact modifier. If phase advancement
         -- or bot possession leaves it attached, a deployed agent can appear
         -- unhittable for several seconds.
-        local match_modifier
-        if game_state ~= nil then
-            match_modifier = unwrap(game_state.InvulnerabilityInstance)
-        end
-        if match_modifier ~= nil then
-            health:RemoveDamageModifier(match_modifier)
-        end
+        if run_modifier_cleanup then
+            local match_modifier
+            if game_state ~= nil then
+                match_modifier = unwrap(game_state.InvulnerabilityInstance)
+            end
+            if match_modifier ~= nil then
+                health:RemoveDamageModifier(match_modifier)
+            end
 
-        -- DisableCover means disguise shielding is not part of this ruleset.
-        -- Remove only the two modifiers owned by the pawn's disguise component;
-        -- agent ability and chip modifiers remain untouched.
-        local shield = unwrap(pawn.DisguiseShieldComponent)
-        if shield ~= nil then
-            shield.DamageReductionDuration = 0.0
-            local disguised = unwrap(shield.ShieldDisguiseDamageModifierInstance)
-            local exposed = unwrap(shield.ShieldDamageModifierInstance)
-            if disguised ~= nil then health:RemoveDamageModifier(disguised) end
-            if exposed ~= nil then health:RemoveDamageModifier(exposed) end
+            -- DisableCover means disguise shielding is not part of this
+            -- ruleset. Remove only the two modifiers owned by the pawn's
+            -- disguise component; agent ability and chip modifiers remain.
+            local shield = unwrap(pawn.DisguiseShieldComponent)
+            if shield ~= nil then
+                shield.DamageReductionDuration = 0.0
+                local disguised =
+                    unwrap(shield.ShieldDisguiseDamageModifierInstance)
+                local exposed = unwrap(shield.ShieldDamageModifierInstance)
+                if disguised ~= nil then
+                    health:RemoveDamageModifier(disguised)
+                end
+                if exposed ~= nil then
+                    health:RemoveDamageModifier(exposed)
+                end
+            end
+            gameplay_last_combat_cleanup[key] = now
         end
     end)
     if not ok then
@@ -362,9 +374,6 @@ local function apply_gameplay()
             if not gameplay_ready[key] then
                 gameplay_ready[key] = true
                 log("gameplay overrides verified: " .. key .. " " ..
-                    table.concat(details, " "))
-            elseif changed then
-                log("gameplay overrides restored: " .. key .. " " ..
                     table.concat(details, " "))
             end
         else
@@ -496,9 +505,10 @@ LoopAsync(30000, function()        -- then keep it applied across map changes
     return false
 end)
 
--- Pawn controls are dynamic and can be restored by deploy, cover, or respawn
--- paths, so keep these broad gameplay rules authoritative once per second.
-LoopAsync(1000, function()
+-- Pawn controls are dynamic and the stock cover tick can restore them between
+-- frames. A 10 Hz authority loop keeps the replicated HUD/gameplay state steady;
+-- the heavier damage-modifier removal is independently capped at 1 Hz.
+LoopAsync(100, function()
     pcall(apply_gameplay)
     return false
 end)
