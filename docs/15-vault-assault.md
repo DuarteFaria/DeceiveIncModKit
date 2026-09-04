@@ -31,8 +31,10 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   faction `1` is the attacking side.
 - The mod waits until spies are deployed, advances `VAULT_LOCKED` through the
   game's proven timer-expiry path, and begins at `VAULT_UNLOCKED`.
-- Defenders are teleported to collision-checked positions around the objective;
-  attackers keep their ordinary map spawns.
+- Defenders are teleported to collision-checked positions around the objective.
+  One live vault-door actor is selected pseudo-randomly per match, and all
+  attackers are placed together about five metres outside that entrance with
+  collision-safe spacing.
 - Every human spy gets full legal health, ammo, intel, all four keycards,
   equipped-gadget charges, and upgrade-chip resources. Player bots retain their
   stock loadouts because bulk grants during bot initialization can trigger a
@@ -107,8 +109,10 @@ Omitting both faction ids makes the mod select the two lowest live faction ids.
   request after a defender produced a stock phase transition without retaining
   the objective.
 - Defender positions use the objective anchor plus collision-checked offsets.
-  Diamondspire is the initial supported test map; other maps need a spawn-layout
-  pass before joining the rotation.
+  Attacker positions are derived from the selected vault door and the direction
+  away from that anchor, rather than hard-coded world coordinates. Diamondspire
+  is the initial supported test map; other maps still need a spawn-layout pass
+  before joining the rotation.
 - Full loadout means all server-owned in-match resources. It cannot equip a
   weapon or gadget the player did not select before deployment.
 

@@ -43,6 +43,36 @@ class VaultAssaultSourceTests(unittest.TestCase):
         self.assertIn("pawn.bIsBot", detector)
         self.assertIn("state.bIsABot", detector)
 
+    def test_attackers_use_one_cached_live_vault_door_per_match(self):
+        start = self.source.index("local function choose_attacker_spawn")
+        stop = self.source.index(
+            "local function teleport_attacker_to_vault_entrance", start)
+        chooser = self.source[start:stop]
+        self.assertIn('FindAllOf("BP_VaultDoorBase_C")', chooser)
+        self.assertIn("if assault_attacker_spawn ~= nil", chooser)
+        self.assertIn("assault_attacker_spawn = selected", chooser)
+        self.assertGreaterEqual(self.source.count("assault_attacker_spawn = nil"),
+                                2)
+
+    def test_attacker_spawn_is_outside_the_selected_door(self):
+        start = self.source.index(
+            "local function teleport_attacker_to_vault_entrance")
+        stop = self.source.index(
+            "-- Query the live pickup source", start)
+        teleport = self.source[start:stop]
+        self.assertIn("spawn.outward_x * distance", teleport)
+        self.assertIn("spawn.outward_y * distance", teleport)
+        self.assertIn("K2_TeleportTo", teleport)
+
+        prepare_start = self.source.index("local function prepare_assault_spies")
+        prepare_stop = self.source.index("local function set_phase_time",
+                                         prepare_start)
+        prepare = self.source[prepare_start:prepare_stop]
+        self.assertIn("faction == assault_attacker_faction and not staged",
+                      prepare)
+        self.assertIn("teleport_attacker_to_vault_entrance(pawn, slot)",
+                      prepare)
+
 
 if __name__ == "__main__":
     unittest.main()

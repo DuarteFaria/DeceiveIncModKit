@@ -1,7 +1,8 @@
 -- DIExtraction: stock-objective custom modes.
 -- carrier_extraction keeps the original natural-grab flow. vault_assault uses
--- Trio's native teams/bots, opens the vault, stages defenders, and enforces one
--- shared attack/extraction deadline around the stock briefcase endgame.
+-- Trio's native teams/bots, opens the vault, stages defenders at the objective
+-- and attackers outside one vault entrance, and enforces one shared
+-- attack/extraction deadline around the stock briefcase endgame.
 --
 -- Safety rules (see spectator-lua-safety): never retain UE4SS UObject wrappers
 -- across ticks; reacquire everything by FindAllOf inside each callback; pcall
@@ -112,10 +113,13 @@ local assault_prepared = {}
 local assault_loadout_prepared = {}
 local assault_staging_prepared = {}
 local assault_defender_slots = {}
+local assault_attacker_slots = {}
 local assault_stage_attempts = {}
 local assault_objective_block_attempts = {}
 local assault_pickup_type_logged = false
 local assault_next_defender_slot = 1
+local assault_next_attacker_slot = 1
+local assault_attacker_spawn = nil
 local assault_timeout_declared = false
 local assault_timeout_advanced = false
 local assault_illegal_carrier = nil
@@ -488,10 +492,13 @@ local function reset_vault_assault_state()
     assault_loadout_prepared = {}
     assault_staging_prepared = {}
     assault_defender_slots = {}
+    assault_attacker_slots = {}
     assault_stage_attempts = {}
     assault_objective_block_attempts = {}
     assault_pickup_type_logged = false
     assault_next_defender_slot = 1
+    assault_next_attacker_slot = 1
+    assault_attacker_spawn = nil
     assault_timeout_declared = false
     assault_timeout_advanced = false
     assault_illegal_carrier = nil
@@ -1043,6 +1050,108 @@ local DEFENDER_OFFSETS = {
     { -420.0, 0.0, 220.0 },
 }
 
+-- Attackers share one randomly selected vault entrance per match. Positions
+-- are measured in centimetres: 500 is five metres beyond the door, away from
+-- the objective, and the lateral offsets spread a Trio across the corridor.
+local ATTACKER_DOOR_DISTANCES = { 500.0, 700.0, 900.0 }
+local ATTACKER_LATERAL_OFFSETS = { 0.0, -180.0, 180.0, -360.0, 360.0 }
+
+local function choose_attacker_spawn()
+    if assault_attacker_spawn ~= nil then
+        return assault_attacker_spawn, nil
+    end
+
+    local objective, objective_kind = find_objective_target()
+    if objective == nil then return nil, "no usable objective anchor" end
+    local objective_location = actor_location(objective)
+    if not is_usable_location(objective_location) then
+        return nil, "objective anchor location invalid"
+    end
+
+    local doors
+    pcall(function() doors = FindAllOf("BP_VaultDoorBase_C") end)
+    if not doors then return nil, "no vault-door actors in world" end
+
+    local candidates = {}
+    for i = 1, #doors do
+        local door = doors[i]
+        if is_live(door) then
+            local location = actor_location(door)
+            if is_usable_location(location) then
+                local dx = location.X - objective_location.X
+                local dy = location.Y - objective_location.Y
+                local horizontal_distance = math.sqrt(dx * dx + dy * dy)
+                -- Reject a class default object or a decorative actor located
+                -- at the objective itself; neither defines an outside vector.
+                if horizontal_distance >= 400.0 then
+                    candidates[#candidates + 1] = {
+                        key = full(door),
+                        x = location.X,
+                        y = location.Y,
+                        z = location.Z,
+                        outward_x = dx / horizontal_distance,
+                        outward_y = dy / horizontal_distance,
+                    }
+                end
+            end
+        end
+    end
+    if #candidates == 0 then
+        return nil, "no usable vault-door locations"
+    end
+    table.sort(candidates, function(a, b) return a.key < b.key end)
+
+    -- Sorting removes FindAllOf iteration-order noise. The current wall-clock
+    -- second then varies the entrance between matches without seeding or
+    -- disturbing Lua's process-wide random-number generator.
+    local selected = candidates[(math.abs(os.time()) % #candidates) + 1]
+    assault_attacker_spawn = selected
+    append("attacker entrance selected: " .. selected.key .. " door=" ..
+           vector_text({ X = selected.x, Y = selected.y, Z = selected.z }) ..
+           " objective=" .. tostring(objective_kind) .. " candidates=" ..
+           tostring(#candidates))
+    return selected, nil
+end
+
+local function teleport_attacker_to_vault_entrance(pawn, slot)
+    local spawn, why = choose_attacker_spawn()
+    if spawn == nil then return false, why end
+
+    -- Perpendicular to the objective->door vector, used to fan the team out
+    -- while keeping every attacker immediately outside the same entrance.
+    local side_x = -spawn.outward_y
+    local side_y = spawn.outward_x
+    for distance_step = 1, #ATTACKER_DOOR_DISTANCES do
+        local distance = ATTACKER_DOOR_DISTANCES[distance_step]
+        for lateral_step = 0, #ATTACKER_LATERAL_OFFSETS - 1 do
+            local index = ((slot - 1 + lateral_step) %
+                           #ATTACKER_LATERAL_OFFSETS) + 1
+            local lateral = ATTACKER_LATERAL_OFFSETS[index]
+            local destination = {
+                X = spawn.x + spawn.outward_x * distance + side_x * lateral,
+                Y = spawn.y + spawn.outward_y * distance + side_y * lateral,
+                Z = spawn.z + 180.0,
+            }
+            local moved = false
+            local ok, err = pcall(function()
+                moved = pawn:K2_TeleportTo(
+                    destination, { Pitch = 0.0, Yaw = 0.0, Roll = 0.0 })
+            end)
+            if ok and moved then
+                append("attacker staged: " .. spy_name(pawn) .. " faction=" ..
+                       tostring(faction_of_spy(pawn)) .. " entrance=" ..
+                       spawn.key .. " destination=" .. vector_text(destination))
+                return true, nil
+            end
+            if not ok then
+                append("attacker teleport call failed for " .. spy_name(pawn) ..
+                       ": " .. describe_error(err))
+            end
+        end
+    end
+    return false, "every collision-safe entrance offset was blocked"
+end
+
 -- Query the live pickup source instead of assuming it uses
 -- EInteractableType::Objective. The previous hard-coded type 13 request was
 -- accepted by the UFunction but did not match the pickup path on the live
@@ -1198,7 +1307,29 @@ local function prepare_assault_spies(spies, pickup_source)
                                spy_name(pawn) .. ": " .. tostring(block_why))
                     end
                 end
-                if not teleport_defenders or faction ~= assault_defender_faction then
+                if faction == assault_attacker_faction and not staged then
+                    local slot = assault_attacker_slots[key]
+                    if slot == nil then
+                        slot = assault_next_attacker_slot
+                        assault_attacker_slots[key] = slot
+                        assault_next_attacker_slot = assault_next_attacker_slot + 1
+                    end
+                    local attempts = assault_stage_attempts[key] or 0
+                    if attempts < TELEPORT_MAX_ATTEMPTS then
+                        staged, stage_why =
+                            teleport_attacker_to_vault_entrance(pawn, slot)
+                        assault_stage_attempts[key] = attempts + 1
+                        if staged then assault_staging_prepared[key] = true end
+                    else
+                        staged = true
+                        assault_staging_prepared[key] = true
+                        stage_why = "gave up after " .. TELEPORT_MAX_ATTEMPTS ..
+                                    " attempts; kept stock spawn"
+                        append("attacker staging gave up for " .. spy_name(pawn) ..
+                               ": " .. stage_why)
+                    end
+                elseif not teleport_defenders or
+                       faction ~= assault_defender_faction then
                     staged = true
                     assault_staging_prepared[key] = true
                 elseif not staged then
@@ -1226,9 +1357,9 @@ local function prepare_assault_spies(spies, pickup_source)
                     end
                 end
 
-                -- Leave an unstaged defender pending so a still-streaming map
-                -- gets another bounded attempt on the next tick. Resource
-                -- grants are idempotent and simply skip already-full values.
+                -- Leave an unstaged player pending so still-streaming map
+                -- geometry gets another bounded attempt on the next tick.
+                -- Resource grants are idempotent and skip already-full values.
                 if loadout_ok and staged and objective_blocked then
                     assault_prepared[key] = true
                     append("vault assault ready: " .. spy_name(pawn) ..
