@@ -100,6 +100,10 @@ local teleport_defenders = true
 -- Player and player-bot agents are ASpy actors instead, so this switch can
 -- remove the wandering population without touching either team's bot slots.
 local remove_ambient_npcs = false
+-- Deterministic per-spy suppression. The reflected stock cheat is a toggle,
+-- not a setter, so invoking it without a readable global state could turn the
+-- system back on. These replicated flags can be written and verified directly.
+local disable_suspicion = false
 
 -- Vault-assault state contains only plain Lua values. UObject wrappers are
 -- always reacquired because UE4SS wrappers become unsafe across map travel.
@@ -116,6 +120,8 @@ local assault_defender_slots = {}
 local assault_attacker_slots = {}
 local assault_stage_attempts = {}
 local assault_objective_block_attempts = {}
+local assault_suspicion_prepared = {}
+local assault_suspicion_last_error = {}
 local assault_pickup_type_logged = false
 local assault_next_defender_slot = 1
 local assault_next_attacker_slot = 1
@@ -374,6 +380,97 @@ local function find_live_spies()
     return result
 end
 
+-- Keep suspicion disabled without installing a high-frequency native hook.
+-- This runs with the existing once-per-second vault-assault tick, but writes
+-- only when a game-owned path has changed one of the two flags. ForceNetUpdate
+-- is likewise limited to an actual replicated Spy state correction.
+local function suppress_suspicion_for_spy(pawn)
+    local changed = false
+    local failures = {}
+    local suspicious
+    local read_suspicious = pcall(function()
+        suspicious = unwrap(pawn.bIsSuspicious)
+    end)
+    if not read_suspicious then
+        failures[#failures + 1] = "bIsSuspicious unreadable"
+    elseif suspicious ~= false then
+        local ok, err = pcall(function() pawn.bIsSuspicious = false end)
+        if ok then
+            changed = true
+        else
+            failures[#failures + 1] = "bIsSuspicious write: " ..
+                                      describe_error(err)
+        end
+    end
+
+    local interacter
+    pcall(function() interacter = unwrap(pawn.InteracterComponent) end)
+    if interacter == nil or not is_live(interacter) then
+        failures[#failures + 1] = "no live InteracterComponent"
+    else
+        local can_trigger
+        local read_trigger = pcall(function()
+            can_trigger = unwrap(interacter.bCanTriggerBotSuspiciousness)
+        end)
+        if not read_trigger then
+            failures[#failures + 1] =
+                "bCanTriggerBotSuspiciousness unreadable"
+        elseif can_trigger ~= false then
+            local ok, err = pcall(function()
+                interacter.bCanTriggerBotSuspiciousness = false
+            end)
+            if ok then
+                changed = true
+            else
+                failures[#failures + 1] =
+                    "bCanTriggerBotSuspiciousness write: " ..
+                    describe_error(err)
+            end
+        end
+    end
+
+    local suspicious_after, trigger_after
+    local verify_suspicious = pcall(function()
+        suspicious_after = unwrap(pawn.bIsSuspicious)
+    end)
+    local verify_trigger = interacter ~= nil and is_live(interacter) and
+        pcall(function()
+            trigger_after = unwrap(interacter.bCanTriggerBotSuspiciousness)
+        end)
+    if not verify_suspicious or suspicious_after ~= false then
+        failures[#failures + 1] = "bIsSuspicious did not read back false"
+    end
+    if not verify_trigger or trigger_after ~= false then
+        failures[#failures + 1] =
+            "bCanTriggerBotSuspiciousness did not read back false"
+    end
+    if changed then pcall(function() pawn:ForceNetUpdate() end) end
+    return #failures == 0, table.concat(failures, "; "), changed
+end
+
+local function suppress_assault_suspicion(spies)
+    if not disable_suspicion then return end
+    for _, pawn in ipairs(spies) do
+        local key = full(player_state_of_spy(pawn))
+        if key == "<nil>" or key == "<unrenderable>" then key = full(pawn) end
+        local ok, why, changed = suppress_suspicion_for_spy(pawn)
+        if ok then
+            assault_suspicion_last_error[key] = nil
+            if not assault_suspicion_prepared[key] then
+                assault_suspicion_prepared[key] = true
+                append("suspicion disabled and verified: " .. spy_name(pawn) ..
+                       " bot=" .. tostring(is_bot_spy(pawn)))
+            elseif changed then
+                append("suspicion state re-cleared: " .. spy_name(pawn))
+            end
+        elseif assault_suspicion_last_error[key] ~= why then
+            assault_suspicion_last_error[key] = why
+            append("suspicion suppression pending for " .. spy_name(pawn) ..
+                   ": " .. tostring(why))
+        end
+    end
+end
+
 local function find_live_player_states()
     local found, result = nil, {}
     pcall(function() found = FindAllOf("DIPlayerState") end)
@@ -495,6 +592,8 @@ local function reset_vault_assault_state()
     assault_attacker_slots = {}
     assault_stage_attempts = {}
     assault_objective_block_attempts = {}
+    assault_suspicion_prepared = {}
+    assault_suspicion_last_error = {}
     assault_pickup_type_logged = false
     assault_next_defender_slot = 1
     assault_next_attacker_slot = 1
@@ -1455,6 +1554,7 @@ vault_assault_tick = function()
     if phase == nil or phase < PHASE_BY_NAME.VAULT_LOCKED then return end
 
     local spies = find_live_spies()
+    suppress_assault_suspicion(spies)
     if phase == PHASE_BY_NAME.VAULT_LOCKED then
         if #spies == 0 then
             append("holding at VAULT_LOCKED: no deployed spies yet")
@@ -2216,6 +2316,10 @@ local function load_config()
         local value = settings.removeambientnpcs:lower()
         remove_ambient_npcs = value == "1" or value == "true" or value == "yes"
     end
+    if settings.disablesuspicion ~= nil then
+        local value = settings.disablesuspicion:lower()
+        disable_suspicion = value == "1" or value == "true" or value == "yes"
+    end
 
     if settings.autoarm == "1" or (settings.autoarm or ""):lower() == "true" then
         armed = true
@@ -2252,7 +2356,8 @@ local function load_config()
                " defender_faction=" .. tostring(configured_defender_faction) ..
                " attacker_faction=" .. tostring(configured_attacker_faction) ..
                " teleport_defenders=" .. tostring(teleport_defenders) ..
-               " remove_ambient_npcs=" .. tostring(remove_ambient_npcs))
+               " remove_ambient_npcs=" .. tostring(remove_ambient_npcs) ..
+               " disable_suspicion=" .. tostring(disable_suspicion))
     end
 end
 

@@ -19,7 +19,8 @@
       "DefenderFaction": 0,
       "AttackerFaction": 1,
       "TeleportDefenders": 1,
-      "RemoveAmbientNPCs": 1
+      "RemoveAmbientNPCs": 1,
+      "DisableSuspicion": 1
     }
   },
   "tripwire": {

@@ -41,6 +41,10 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   status-3 shutdown. Friendly fire is explicitly disabled.
 - Wandering ambient NPC actors are removed as they spawn. The five player-bot
   agents are retained and continue to occupy the remaining Trio slots.
+- When `DisableSuspicion=1`, every live agent (human or bot) has suspicion
+  triggers disabled and any suspicious state cleared by the existing
+  once-per-second mode tick. Both reflected flags are read back before the
+  agent is logged as ready.
 - Attackers have 120 seconds to pick up the briefcase. Their first valid pickup
   replaces the clock with a single 60-second extraction deadline. That deadline
   continues if the case is dropped and is carried across stock extraction phase
@@ -71,11 +75,14 @@ DefenderFaction = 0
 AttackerFaction = 1
 TeleportDefenders = 1
 RemoveAmbientNPCs = 1
+DisableSuspicion = 1
 ```
 
 Omitting both faction ids makes the mod select the two lowest live faction ids.
 `TeleportDefenders = 0` leaves both teams at their stock spawn points.
 `RemoveAmbientNPCs = 0` restores the stock wandering population.
+`DisableSuspicion = 0` restores the stock suspicion system. The setting is
+also available as **Disable suspicion** in the mod-kit profile editor.
 
 ## First live-test checklist
 

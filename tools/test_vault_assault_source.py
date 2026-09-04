@@ -73,6 +73,32 @@ class VaultAssaultSourceTests(unittest.TestCase):
         self.assertIn("teleport_attacker_to_vault_entrance(pawn, slot)",
                       prepare)
 
+    def test_suspicion_setting_uses_verified_flags_not_global_toggle(self):
+        start = self.source.index("local function suppress_suspicion_for_spy")
+        stop = self.source.index("local function find_live_player_states", start)
+        suppression = self.source[start:stop]
+
+        self.assertIn("pawn.bIsSuspicious = false", suppression)
+        self.assertIn("interacter.bCanTriggerBotSuspiciousness = false",
+                      suppression)
+        self.assertIn("suspicious_after ~= false", suppression)
+        self.assertIn("trigger_after ~= false", suppression)
+        self.assertNotIn("CheatToggleSpySuspiciousSystem", self.source)
+
+    def test_suspicion_is_maintained_on_existing_tick(self):
+        start = self.source.index("vault_assault_tick = function()")
+        stop = self.source.index("local carrier", start)
+        tick = self.source[start:stop]
+
+        self.assertIn("local spies = find_live_spies()", tick)
+        self.assertIn("suppress_assault_suspicion(spies)", tick)
+        self.assertLess(tick.index("local spies = find_live_spies()"),
+                        tick.index("suppress_assault_suspicion(spies)"))
+
+    def test_suspicion_setting_is_loaded_from_config(self):
+        self.assertIn("settings.disablesuspicion", self.source)
+        self.assertIn("disable_suspicion = value == \"1\"", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
