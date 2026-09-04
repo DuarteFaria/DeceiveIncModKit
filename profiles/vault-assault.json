@@ -1,0 +1,39 @@
+{
+  "description": "3v3 vault-assault prototype: faction 0 defends the open vault while faction 1 has 120 seconds to take the briefcase, then 60 seconds total to extract. Five player bots are retained while wandering ambient NPCs are removed.",
+  "persistent_server": true,
+  "mods": {
+    "DIConfig": true,
+    "DIExtraction": true
+  },
+  "diconfig": {
+    "Timing": {
+      "LobbyWaitTime": 15,
+      "IntroPhaseTime": 5
+    },
+    "Extraction": {
+      "Mode": "vault_assault",
+      "AutoArm": 1,
+      "AutoLoadout": 1,
+      "AssaultTime": 120,
+      "SecuredTime": 60,
+      "DefenderFaction": 0,
+      "AttackerFaction": 1,
+      "TeleportDefenders": 1,
+      "RemoveAmbientNPCs": 1
+    }
+  },
+  "tripwire": {
+    "GameMode": "Trio",
+    "bSandboxMode": "True",
+    "MaxPlayers": "6",
+    "BotsAmount": "5",
+    "bFillWithBots": "True",
+    "bIsPublic": "True",
+    "bEnableUPnP": "True",
+    "AutoShutdownEmptyMinutes": "60",
+    "BotsDifficulty": "Difficult",
+    "MapRotation": [
+      "Diamondspire"
+    ]
+  }
+}

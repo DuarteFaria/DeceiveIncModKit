@@ -1,9 +1,7 @@
--- DIExtraction: carrier-extraction custom mode (approach A, natural grab).
--- Waits for VAULT_LOCKED, fires the game's own timer-expiry phase transition
--- into VAULT_UNLOCKED, then teleports the designated carrier next to the live
--- BP_Briefcase so they grab it through the game's own pickup. Everything after
--- that (carrier state, KillCarrier objectives, extraction call, win/lose) is
--- the game's stock endgame flow.
+-- DIExtraction: stock-objective custom modes.
+-- carrier_extraction keeps the original natural-grab flow. vault_assault uses
+-- Trio's native teams/bots, opens the vault, stages defenders, and enforces one
+-- shared attack/extraction deadline around the stock briefcase endgame.
 --
 -- Safety rules (see spectator-lua-safety): never retain UE4SS UObject wrappers
 -- across ticks; reacquire everything by FindAllOf inside each callback; pcall
@@ -82,10 +80,49 @@ local desired_disguise = nil
 -- there instead of to the local below.
 local apply_disguise
 local grant_full_resources
+local grant_full_resources_to_pawn
+local vault_assault_tick
 -- Set from DIConfig.ini; kitting the carrier out is a once-per-match action, so
 -- it is latched rather than repeated every tick.
 local auto_loadout = false
 local carrier_prepared = false
+
+-- The original carrier-extraction behavior remains the default. The
+-- vault_assault profile selects the asymmetric 3v3 prototype explicitly.
+local extraction_mode = "carrier_extraction"
+local assault_time = 120
+local secured_time = 60
+local configured_defender_faction = nil
+local configured_attacker_faction = nil
+local teleport_defenders = true
+-- Ambient civilians/staff/guards/technicians/VIPs are ANPCCharacter actors.
+-- Player and player-bot agents are ASpy actors instead, so this switch can
+-- remove the wandering population without touching either team's bot slots.
+local remove_ambient_npcs = false
+
+-- Vault-assault state contains only plain Lua values. UObject wrappers are
+-- always reacquired because UE4SS wrappers become unsafe across map travel.
+local assault_initialized = false
+local assault_secured = false
+local assault_deadline = nil
+local assault_phase_timed = nil
+local assault_defender_faction = nil
+local assault_attacker_faction = nil
+local assault_prepared = {}
+local assault_loadout_prepared = {}
+local assault_staging_prepared = {}
+local assault_defender_slots = {}
+local assault_stage_attempts = {}
+local assault_objective_block_attempts = {}
+local assault_pickup_type_logged = false
+local assault_next_defender_slot = 1
+local assault_timeout_declared = false
+local assault_timeout_advanced = false
+local assault_illegal_carrier = nil
+local assault_illegal_remove_at = 0
+local assault_ambient_npcs_removed = 0
+local assault_npc_cleanup_error = nil
+local assault_quarantined_npcs = {}
 
 -- ESpyGamePhase (CXXHeaderDump, build 24975521)
 local PHASE_NAMES = {
@@ -170,7 +207,8 @@ end
 local function is_live(object)
     local name = full(object)
     return name ~= "<nil>" and name ~= "<unrenderable>" and
-           not name:find("Default__", 1, true)
+           not name:find("Default__", 1, true) and
+           not name:find(".PersistentLevel.None", 1, true)
 end
 
 local function find_live_game_state()
@@ -245,6 +283,199 @@ local function is_human(controller)
     return not bot
 end
 
+local function number_property(object, name)
+    local raw
+    if object == nil or not pcall(function() raw = unwrap(object[name]) end) then
+        return nil
+    end
+    if type(raw) == "number" then return raw end
+    local converted
+    pcall(function() converted = tonumber(raw) end)
+    if converted ~= nil then return converted end
+    local rendered
+    pcall(function() rendered = tostring(raw:ToString()) end)
+    if rendered == nil then pcall(function() rendered = tostring(raw) end) end
+    if type(rendered) ~= "string" then return nil end
+    return tonumber(rendered:match("(-?%d+)$"))
+end
+
+local function player_state_of_spy(pawn)
+    local state
+    pcall(function() state = unwrap(pawn.CachedDIPlayerState) end)
+    if state == nil then pcall(function() state = unwrap(pawn.PlayerState) end) end
+    if state == nil then
+        pcall(function()
+            local controller = unwrap(pawn.Controller)
+            if controller then state = unwrap(controller.PlayerState) end
+        end)
+    end
+    return state
+end
+
+local function faction_of_spy(pawn)
+    local faction = number_property(player_state_of_spy(pawn), "FactionID")
+    if faction == nil then
+        -- Player bots can finish possession a tick before CachedDIPlayerState is
+        -- populated. HealthComponent carries the same combat faction and is
+        -- already valid at that point, so it is a safe role-assignment fallback.
+        local health
+        pcall(function() health = unwrap(pawn.HealthComponent) end)
+        faction = number_property(health, "FactionID")
+    end
+    return faction
+end
+
+local function spy_name(pawn)
+    local state = player_state_of_spy(pawn)
+    local name
+    if state then
+        pcall(function() name = tostring(state:GetPlayerName():ToString()) end)
+        if name == nil then pcall(function() name = tostring(state.PlayerDisplayName) end) end
+    end
+    return name or full(pawn)
+end
+
+local function find_live_spies()
+    local found, result = nil, {}
+    pcall(function() found = FindAllOf("Spy") end)
+    if not found then return result end
+    for i = 1, #found do
+        if is_live(found[i]) then result[#result + 1] = found[i] end
+    end
+    return result
+end
+
+local function find_live_player_states()
+    local found, result = nil, {}
+    pcall(function() found = FindAllOf("DIPlayerState") end)
+    if not found then return result end
+    for i = 1, #found do
+        if is_live(found[i]) then result[#result + 1] = found[i] end
+    end
+    return result
+end
+
+-- There is no ambient-population count in UTripwireServerSettings. The map's
+-- PopulationManager creates NPCCharacter actors from its own data asset, so a
+-- server-only prototype has to neutralize those actors after they appear. Keep
+-- the actors registered with PopulationManager: destroying them makes the game
+-- replenish them immediately and can produce a runaway spawn loop. Hiding them,
+-- disabling collision/tick, and forcing a net update removes them from play
+-- while keeping the manager's population accounting satisfied.
+-- Use PopulationManager.AllNPCs instead of FindAllOf("NPCCharacter"): a spy's
+-- cover/disguise representation is also an NPCCharacter, but is not part of the
+-- manager's ambient population. ASpy itself is also a separate ACharacter type.
+local function remove_ambient_npcs_tick()
+    if not remove_ambient_npcs then return end
+    local managers
+    local find_ok, find_err = pcall(function()
+        managers = FindAllOf("PopulationManager")
+    end)
+    if not find_ok then
+        local message = describe_error(find_err)
+        if message ~= assault_npc_cleanup_error then
+            assault_npc_cleanup_error = message
+            append("ambient NPC cleanup lookup failed: " .. message)
+        end
+        return
+    end
+    if not managers then return end
+
+    -- Snapshot the manager-owned population before mutating actor state.
+    local targets = {}
+    local seen = {}
+    for i = 1, #managers do
+        local manager = managers[i]
+        if is_live(manager) then
+            local population
+            pcall(function() population = manager.AllNPCs end)
+            if population then
+                local count = 0
+                pcall(function() count = #population end)
+                for j = 1, count do
+                    local npc
+                    pcall(function() npc = unwrap(population[j]) end)
+                    if npc ~= nil and is_live(npc) then
+                        local key = full(npc)
+                        if not seen[key] then
+                            seen[key] = true
+                            targets[#targets + 1] = npc
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local removed = 0
+    local failed = 0
+    local first_error = nil
+    for i = 1, #targets do
+        local npc = targets[i]
+        local key = full(npc)
+        if is_live(npc) and not assault_quarantined_npcs[key] then
+            local hide_ok, hide_err = pcall(function()
+                npc:SetActorHiddenInGame(true)
+            end)
+            local collision_ok, collision_err = pcall(function()
+                npc:SetActorEnableCollision(false)
+            end)
+            local tick_ok, tick_err = pcall(function()
+                npc:SetActorTickEnabled(false)
+            end)
+            local net_ok, net_err = pcall(function() npc:ForceNetUpdate() end)
+            if hide_ok and collision_ok and tick_ok and net_ok then
+                assault_quarantined_npcs[key] = true
+                removed = removed + 1
+            else
+                failed = failed + 1
+                first_error = first_error or describe_error(
+                    hide_err or collision_err or tick_err or net_err)
+            end
+        end
+    end
+
+    if removed > 0 then
+        assault_ambient_npcs_removed = assault_ambient_npcs_removed + removed
+        append("ambient NPC cleanup: quarantined=" .. removed ..
+               " total=" .. assault_ambient_npcs_removed ..
+               " (Spy agents and player bots untouched)")
+    end
+    if failed > 0 then
+        local message = tostring(failed) .. " actor(s): " .. tostring(first_error)
+        if message ~= assault_npc_cleanup_error then
+            assault_npc_cleanup_error = message
+            append("ambient NPC cleanup failed for " .. message)
+        end
+    elseif find_ok then
+        assault_npc_cleanup_error = nil
+    end
+end
+
+local function reset_vault_assault_state()
+    assault_initialized = false
+    assault_secured = false
+    assault_deadline = nil
+    assault_phase_timed = nil
+    assault_defender_faction = configured_defender_faction
+    assault_attacker_faction = configured_attacker_faction
+    assault_prepared = {}
+    assault_loadout_prepared = {}
+    assault_staging_prepared = {}
+    assault_defender_slots = {}
+    assault_stage_attempts = {}
+    assault_objective_block_attempts = {}
+    assault_pickup_type_logged = false
+    assault_next_defender_slot = 1
+    assault_timeout_declared = false
+    assault_timeout_advanced = false
+    assault_illegal_carrier = nil
+    assault_illegal_remove_at = 0
+    assault_ambient_npcs_removed = 0
+    assault_npc_cleanup_error = nil
+    assault_quarantined_npcs = {}
+end
+
 -- The designated carrier's live controller: name-substring match when a
 -- filter was given, otherwise the first human connection.
 local function find_carrier_controller()
@@ -271,18 +502,102 @@ local function find_carrier_controller()
     return nil, "no human player connected"
 end
 
--- Not every BP_Briefcase_C is the briefcase sitting in the vault. Each spy
--- carries a display-only instance parented under it as the
--- EGameplayResourcesType::Mission_Objective item cache; a live run picked one
--- of those and "teleported" the carrier onto its own position. The real
--- objective is the one owned by the level: no attach parent, and a plain
--- BP_Briefcase_C_<n> object name rather than a spy-prefixed ItemCache name.
-local function is_world_briefcase(case)
+-- Not every BP_Briefcase_C is a pickable objective. Each spy carries several
+-- display-only ItemCache instances. The real case has a plain BP_Briefcase_C
+-- object name; while it is in the vault it may still be attached to its
+-- pedestal, so attachment cannot be used to decide interaction eligibility.
+local function is_pickup_briefcase(case)
     if not is_live(case) then return false end
     local name = full(case)
     local short = name:match("([^.]+)$") or name
     if short:find("ItemCache", 1, true) then return false end
     if not short:find("^BP_Briefcase_C") then return false end
+    return true
+end
+
+local INTERACTABLE_TYPE_BY_NAME = {
+    Invalid = 0, IntelSource = 1, KeyCard = 2, Ammo = 3, NPC = 4,
+    Spy = 5, Door = 6, HackableDoor = 7, Container = 8, Chest = 9,
+    StrongBox = 10, PowerupModule = 11, SpyCache = 12, Objective = 13,
+    Extraction = 14, VaultTerminal = 15, ObjectiveTerminal = 16,
+    Furniture = 17, AmmoDispenser = 18, HealthDispenser = 19,
+    Social = 20, PickableTool = 21, Pickable_HardCurrency = 22,
+    Pickable_SoftCurrency = 23, Pickable_XP = 24, Breadcrumb = 25,
+    Consumable = 26, Deployable_BounceMat = 27, Deployable_Turret = 28,
+    Deployable_Drone = 29, Deployable_Goopod = 30,
+    Deployable_Tripwire = 31, Deployable_Scrambler = 32,
+    Deployable_SoundMachine = 33, Environment_WindowShutter = 34,
+    Environment_ElevatorCallButton = 35, KeycardPrinter = 36,
+    LostAndFound = 37, HealthConsumable = 38,
+    HealthConsumableDispenser = 39, RetinalScanner = 40,
+}
+
+local INTERACTABLE_NAME_BY_TYPE = {}
+for name, value in pairs(INTERACTABLE_TYPE_BY_NAME) do
+    INTERACTABLE_NAME_BY_TYPE[value] = name
+end
+
+local function normalize_interactable_type(raw)
+    raw = unwrap(raw)
+    if type(raw) == "number" then return raw end
+    local converted
+    pcall(function() converted = tonumber(raw) end)
+    if converted ~= nil then return converted end
+    local rendered
+    pcall(function() rendered = tostring(raw:ToString()) end)
+    if rendered == nil then pcall(function() rendered = tostring(raw) end) end
+    if type(rendered) ~= "string" then return nil end
+    local numeric = tonumber(rendered:match("(-?%d+)$"))
+    if numeric ~= nil then return numeric end
+    local name = rendered:match("EInteractableType::([%w_]+)$") or
+                 rendered:match("([%w_]+)$")
+    return name and INTERACTABLE_TYPE_BY_NAME[name] or nil
+end
+
+local function find_pickup_briefcase()
+    local cases
+    pcall(function() cases = FindAllOf("BP_Briefcase_C") end)
+    if not cases then return nil end
+    for i = 1, #cases do
+        if is_pickup_briefcase(cases[i]) then return cases[i] end
+    end
+    return nil
+end
+
+-- The visible case is not necessarily the actor being interacted with. On
+-- Diamond Spire no standalone world BP_Briefcase exists before pickup; the
+-- universal objective terminal owns the InteractableComponent and grants the
+-- case when its Blueprint event completes. Prefer a real case where one exists,
+-- otherwise gate the terminal that actually drives the stock phase change.
+local function find_objective_pickup_source()
+    local briefcase = find_pickup_briefcase()
+    if briefcase ~= nil then return briefcase, "briefcase" end
+    local terminals
+    pcall(function() terminals = FindAllOf("Bp_Objective_Terminal_C") end)
+    if terminals then
+        for i = 1, #terminals do
+            if is_live(terminals[i]) then
+                return terminals[i], "objective terminal"
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function interactable_type_of(actor)
+    local type_value = number_property(actor, "InteractableType")
+    if type_value == nil then
+        local raw
+        pcall(function() raw = actor:GetInteractableType() end)
+        type_value = normalize_interactable_type(raw)
+    end
+    return type_value
+end
+
+-- Teleport targeting is stricter: only a detached world case is safe. When the
+-- case is still attached in the vault, the objective pedestal is used instead.
+local function is_world_briefcase(case)
+    if not is_pickup_briefcase(case) then return false end
     local attached
     pcall(function() attached = unwrap(case:GetAttachParentActor()) end)
     if attached ~= nil then return false end
@@ -506,6 +821,9 @@ end
 -- DINativeStage2), then completes at VAULT_UNLOCKED with the teleport.
 local function extraction_tick()
     if not armed then return end
+    if extraction_mode == "vault_assault" then
+        return vault_assault_tick()
+    end
     local game_state = find_live_game_state()
     if game_state == nil then return end
     local phase = current_phase(game_state)
@@ -607,10 +925,8 @@ end
 -- spend path sees an impossible value. A max of 0 means this spy/agent does not
 -- use that resource at all (e.g. charges for a gadget they did not equip), and
 -- it is skipped.
-grant_full_resources = function(controller)
-    local name = tostring(player_name_of(controller))
-    local pawn
-    pcall(function() pawn = unwrap(controller.Pawn) end)
+grant_full_resources_to_pawn = function(pawn, display_name)
+    local name = tostring(display_name or spy_name(pawn))
     if pawn == nil or not is_live(pawn) then
         return false, "no live pawn for " .. name .. " (not deployed?)"
     end
@@ -653,6 +969,423 @@ grant_full_resources = function(controller)
            " granted=" .. granted .. " skipped=" .. skipped ..
            " failed=" .. failed)
     return true, nil
+end
+
+grant_full_resources = function(controller)
+    local name = tostring(player_name_of(controller))
+    local pawn
+    pcall(function() pawn = unwrap(controller.Pawn) end)
+    return grant_full_resources_to_pawn(pawn, name)
+end
+
+local function resolve_assault_factions(spies)
+    if assault_defender_faction ~= nil and assault_attacker_faction ~= nil then
+        return true
+    end
+
+    local seen, factions = {}, {}
+    for _, pawn in ipairs(spies) do
+        local faction = faction_of_spy(pawn)
+        if faction ~= nil and faction < 200 and not seen[faction] then
+            seen[faction] = true
+            factions[#factions + 1] = faction
+        end
+    end
+    table.sort(factions)
+    assault_defender_faction = assault_defender_faction or factions[1]
+    for _, faction in ipairs(factions) do
+        if faction ~= assault_defender_faction then
+            assault_attacker_faction = assault_attacker_faction or faction
+            break
+        end
+    end
+    if assault_defender_faction == nil or assault_attacker_faction == nil then
+        return false
+    end
+    append("vault assault roles: defenders=faction " ..
+           tostring(assault_defender_faction) .. " attackers=faction " ..
+           tostring(assault_attacker_faction))
+    return true
+end
+
+local DEFENDER_OFFSETS = {
+    { 0.0,    0.0, 300.0 },
+    { 260.0,  0.0, 180.0 },
+    { -260.0, 0.0, 180.0 },
+    { 0.0,  260.0, 180.0 },
+    { 0.0, -260.0, 180.0 },
+    { 420.0,  0.0, 220.0 },
+    { -420.0, 0.0, 220.0 },
+}
+
+-- Query the live pickup source instead of assuming it uses
+-- EInteractableType::Objective. The previous hard-coded type 13 request was
+-- accepted by the UFunction but did not match the pickup path on the live
+-- actor: a defender could complete the stock pickup, advance the phase, then
+-- have the resource stripped one tick later. Validate the native block against
+-- the exact source before considering a defender prepared.
+local function block_defender_briefcase_interaction(pawn, pickup_source)
+    if pickup_source == nil or not is_live(pickup_source) then
+        return false, "live objective pickup source not available"
+    end
+    local interactable_type = interactable_type_of(pickup_source)
+    if type(interactable_type) ~= "number" or interactable_type < 0 or
+       interactable_type >= 41 then
+        return false, "pickup source InteractableType unreadable (" ..
+                      scalar_property(pickup_source, "InteractableType") .. ")"
+    end
+    local pickup_interactable
+    pcall(function()
+        pickup_interactable = unwrap(pickup_source:GetInteractableComponent())
+    end)
+    if pickup_interactable == nil or not is_live(pickup_interactable) then
+        pcall(function()
+            pickup_interactable = unwrap(pickup_source.InteractableComp)
+        end)
+    end
+    if pickup_interactable == nil or not is_live(pickup_interactable) then
+        return false, "pickup source has no live InteractableComponent"
+    end
+
+    local interacter
+    pcall(function() interacter = unwrap(pawn.InteracterComponent) end)
+    if interacter == nil or not is_live(interacter) then
+        return false, "no live InteracterComponent"
+    end
+    local ok, err = pcall(function()
+        interacter:BlockInteractableTypes({ interactable_type }, pawn)
+    end)
+    if not ok then return false, describe_error(err) end
+
+    local blocked, valid
+    local blocked_ok, blocked_err = pcall(function()
+        blocked = unwrap(interacter:IsInteractTypeBlocked(pickup_interactable))
+    end)
+    pcall(function()
+        valid = unwrap(interacter:IsValidInteractType(pickup_interactable, true))
+    end)
+    if not blocked_ok then return false, describe_error(blocked_err) end
+    if blocked ~= true then
+        return false, "native verification failed: type=" ..
+                      tostring(INTERACTABLE_NAME_BY_TYPE[interactable_type] or "?") ..
+                      "(" .. tostring(interactable_type) .. ") blocked=" ..
+                      tostring(blocked) .. " valid=" .. tostring(valid)
+    end
+    return true, "type=" ..
+                 tostring(INTERACTABLE_NAME_BY_TYPE[interactable_type] or "?") ..
+                 "(" .. tostring(interactable_type) .. ") blocked=true valid=" ..
+                 tostring(valid)
+end
+
+local function teleport_defender_to_objective(pawn, slot)
+    local target, kind = find_objective_target()
+    if target == nil then return false, "no usable objective anchor" end
+    local location = actor_location(target)
+    if not is_usable_location(location) then return false, "anchor location invalid" end
+
+    -- Start from this defender's own slot, then try every other known-safe
+    -- offset. K2_TeleportTo sweeps collision and returns false rather than
+    -- placing a pawn inside the pedestal or wall.
+    for step = 0, #DEFENDER_OFFSETS - 1 do
+        local index = ((slot - 1 + step) % #DEFENDER_OFFSETS) + 1
+        local offset = DEFENDER_OFFSETS[index]
+        local destination = {
+            X = location.X + offset[1],
+            Y = location.Y + offset[2],
+            Z = location.Z + offset[3],
+        }
+        local moved = false
+        local ok, err = pcall(function()
+            moved = pawn:K2_TeleportTo(
+                destination, { Pitch = 0.0, Yaw = 180.0, Roll = 0.0 })
+        end)
+        if ok and moved then
+            append("defender staged: " .. spy_name(pawn) .. " faction=" ..
+                   tostring(faction_of_spy(pawn)) .. " target=" .. kind ..
+                   " offset=" .. string.format("(%+.0f,%+.0f,%+.0f)",
+                                                offset[1], offset[2], offset[3]))
+            return true, nil
+        end
+        if not ok then
+            append("defender teleport call failed for " .. spy_name(pawn) ..
+                   ": " .. describe_error(err))
+        end
+    end
+    return false, "every collision-safe offset was blocked"
+end
+
+local function prepare_assault_spies(spies, pickup_source)
+    for _, pawn in ipairs(spies) do
+        local key = full(player_state_of_spy(pawn))
+        if key == "<nil>" or key == "<unrenderable>" then key = full(pawn) end
+        if not assault_prepared[key] then
+            local faction = faction_of_spy(pawn)
+            if faction ~= nil then
+                local loadout_ok = assault_loadout_prepared[key] == true
+                local loadout_why = nil
+                if not auto_loadout then
+                    loadout_ok = true
+                    assault_loadout_prepared[key] = true
+                elseif not loadout_ok then
+                    loadout_ok, loadout_why = grant_full_resources_to_pawn(
+                        pawn, spy_name(pawn))
+                    if loadout_ok then assault_loadout_prepared[key] = true end
+                end
+
+                local health
+                pcall(function() health = unwrap(pawn.HealthComponent) end)
+                if health and is_live(health) then
+                    pcall(function() health.bAllowFriendlyFire = false end)
+                end
+
+                local staged = assault_staging_prepared[key] == true
+                local stage_why = nil
+                local objective_blocked, block_why = true, nil
+                if faction == assault_defender_faction then
+                    objective_blocked, block_why =
+                        block_defender_briefcase_interaction(pawn, pickup_source)
+                    local attempts = assault_objective_block_attempts[key] or 0
+                    assault_objective_block_attempts[key] = attempts + 1
+                    if objective_blocked and attempts == 0 then
+                        append("defender briefcase interaction verified blocked: " ..
+                               spy_name(pawn) .. " faction=" .. tostring(faction) ..
+                               " " .. tostring(block_why))
+                    elseif not objective_blocked and attempts < 3 then
+                        append("defender objective block pending for " ..
+                               spy_name(pawn) .. ": " .. tostring(block_why))
+                    end
+                end
+                if not teleport_defenders or faction ~= assault_defender_faction then
+                    staged = true
+                    assault_staging_prepared[key] = true
+                elseif not staged then
+                    local slot = assault_defender_slots[key]
+                    if slot == nil then
+                        slot = assault_next_defender_slot
+                        assault_defender_slots[key] = slot
+                        assault_next_defender_slot = assault_next_defender_slot + 1
+                    end
+                    local attempts = assault_stage_attempts[key] or 0
+                    if attempts < TELEPORT_MAX_ATTEMPTS then
+                        staged, stage_why = teleport_defender_to_objective(pawn, slot)
+                        assault_stage_attempts[key] = attempts + 1
+                        if staged then assault_staging_prepared[key] = true end
+                    else
+                        -- Stop retrying and let the defender play from the stock
+                        -- spawn. A missing stage point must never flood the log
+                        -- or block the rest of that spy's preparation forever.
+                        staged = true
+                        assault_staging_prepared[key] = true
+                        stage_why = "gave up after " .. TELEPORT_MAX_ATTEMPTS ..
+                                    " attempts; kept stock spawn"
+                        append("defender staging gave up for " .. spy_name(pawn) ..
+                               ": " .. stage_why)
+                    end
+                end
+
+                -- Leave an unstaged defender pending so a still-streaming map
+                -- gets another bounded attempt on the next tick. Resource
+                -- grants are idempotent and simply skip already-full values.
+                if loadout_ok and staged and objective_blocked then
+                    assault_prepared[key] = true
+                    append("vault assault ready: " .. spy_name(pawn) ..
+                           " faction=" .. tostring(faction) ..
+                           (faction == assault_defender_faction and
+                                " role=DEFENDER" or
+                            faction == assault_attacker_faction and
+                                " role=ATTACKER" or " role=UNASSIGNED"))
+                else
+                    append("vault assault preparation pending for " ..
+                           spy_name(pawn) .. ": loadout=" ..
+                           tostring(loadout_why or loadout_ok) .. " stage=" ..
+                           tostring(stage_why or staged) .. " objective_block=" ..
+                           tostring(block_why or objective_blocked))
+                end
+            end
+        end
+    end
+end
+
+local function set_phase_time(game_state, seconds, reason)
+    local value = math.max(1, math.floor(seconds + 0.5))
+    local before, after, game_after, hud_after
+    pcall(function() before = game_state:GetCurrentPhaseTimeLeftInSeconds() end)
+    local ok, err = pcall(function()
+        game_state:SetCurrentPhaseTimeLeftInSeconds(value)
+    end)
+    pcall(function() after = game_state:GetCurrentPhaseTimeLeftInSeconds() end)
+    pcall(function() game_after = game_state:GetCurrentGamePhaseTimeLeft() end)
+    pcall(function() hud_after = game_state:GetTimeLeftforHUD() end)
+    append("vault assault timer " .. tostring(reason) .. ": " ..
+           tostring(before) .. " -> " .. tostring(after) ..
+           " requested=" .. tostring(value) .. " game=" ..
+           tostring(game_after) .. " hud=" .. tostring(hud_after) ..
+           " ok=" .. tostring(ok) ..
+           (ok and "" or " error=" .. describe_error(err)))
+    return ok
+end
+
+local function remove_illegal_defender_objective(pawn)
+    local resources
+    pcall(function() resources = unwrap(pawn.GameplayResourcesComponent) end)
+    if resources == nil or not is_live(resources) then
+        return false, "no GameplayResourcesComponent"
+    end
+    local amount
+    local read_ok = pcall(function()
+        amount = resources:GetResourceAmount(8) -- Mission_Objective
+    end)
+    if not read_ok or type(amount) ~= "number" or amount <= 0 then
+        return false, "Mission_Objective amount unreadable or zero"
+    end
+    local ok, err = pcall(function() resources:RemoveResource(8, amount) end)
+    if not ok then return false, describe_error(err) end
+    return true, nil
+end
+
+local function mark_defender_winners()
+    if assault_defender_faction == nil then return end
+    local changed = 0
+    for _, state in ipairs(find_live_player_states()) do
+        local faction = number_property(state, "FactionID")
+        if faction ~= nil then
+            local won = faction == assault_defender_faction
+            local ok = pcall(function() state.bWon = won end)
+            if ok then changed = changed + 1 end
+        end
+    end
+    if not assault_timeout_declared then
+        assault_timeout_declared = true
+        append("VAULT ASSAULT DEFENDER WIN: objective timer expired; marked " ..
+               changed .. " player state(s), defender faction=" ..
+               tostring(assault_defender_faction))
+    end
+end
+
+-- Asymmetric prototype. Trio supplies the native 3-person factions and bots;
+-- this layer assigns the first faction as defenders and the second as
+-- attackers, opens the vault, stages defenders, grants every spy a full legal
+-- resource loadout, and changes the stock replicated clock from 120 seconds to
+-- 60 seconds on the first valid attacker pickup. Extraction and its result stay
+-- entirely stock.
+vault_assault_tick = function()
+    if not armed then return end
+    remove_ambient_npcs_tick()
+    local game_state = find_live_game_state()
+    if game_state == nil then return end
+    local phase = current_phase(game_state)
+    if phase ~= last_logged_phase then
+        append("vault assault phase=" .. phase_label(phase))
+        last_logged_phase = phase
+    end
+    if phase == nil or phase < PHASE_BY_NAME.VAULT_LOCKED then return end
+
+    local spies = find_live_spies()
+    if phase == PHASE_BY_NAME.VAULT_LOCKED then
+        if #spies == 0 then
+            append("holding at VAULT_LOCKED: no deployed spies yet")
+            return
+        end
+        if advance_attempted then return end
+        advance_attempted = true
+        local ok, err = pcall(function() game_state:AdvancePhase(true) end)
+        append("vault assault AdvancePhase(true) at VAULT_LOCKED spies=" ..
+               #spies .. " ok=" .. tostring(ok) .. " error=" ..
+               tostring(err))
+        return
+    end
+
+    if phase >= PHASE_BY_NAME.RESULT_SCREEN then
+        if assault_timeout_declared or number_property(game_state, "MatchResult") == 4 then
+            mark_defender_winners()
+        end
+        return
+    end
+
+    if phase < PHASE_BY_NAME.VAULT_UNLOCKED or
+       phase > PHASE_BY_NAME.EXTRACTION_ARRIVED then return end
+
+    if not assault_initialized then
+        assault_initialized = true
+        assault_deadline = os.time() + assault_time
+        assault_phase_timed = phase
+        set_phase_time(game_state, assault_time, "round start")
+        append("vault assault live: " .. tostring(assault_time) ..
+               "s to secure the briefcase; " .. tostring(secured_time) ..
+               "s after attacker pickup; player bots retained; ambient NPCs " ..
+               (remove_ambient_npcs and "removed" or "retained"))
+    end
+
+    if not resolve_assault_factions(spies) then
+        append("vault assault waiting for two populated factions; spies=" .. #spies)
+        return
+    end
+    local pickup_source, pickup_kind = find_objective_pickup_source()
+    if pickup_source ~= nil and not assault_pickup_type_logged then
+        local live_type = interactable_type_of(pickup_source)
+        assault_pickup_type_logged = true
+        append("live objective pickup interaction: source=" ..
+               tostring(pickup_kind) .. " actor=" .. full(pickup_source) ..
+               " property=" ..
+               scalar_property(pickup_source, "InteractableType") ..
+               " resolved=" ..
+               tostring(INTERACTABLE_NAME_BY_TYPE[live_type] or "?") ..
+               "(" .. tostring(live_type) .. ")")
+    end
+    prepare_assault_spies(spies, pickup_source)
+
+    local carrier
+    pcall(function() carrier = unwrap(game_state.ObjectiveCarrier) end)
+    if carrier ~= nil and is_live(carrier) then
+        local carrier_faction = faction_of_spy(carrier)
+        local carrier_key = full(carrier)
+        if carrier_faction == assault_defender_faction then
+            local now = os.time()
+            if carrier_key ~= assault_illegal_carrier or
+               now - assault_illegal_remove_at >= 3 then
+                assault_illegal_carrier = carrier_key
+                assault_illegal_remove_at = now
+                local ok, why = remove_illegal_defender_objective(carrier)
+                append("blocked defender briefcase pickup: " .. spy_name(carrier) ..
+                       " faction=" .. tostring(carrier_faction) ..
+                       " removed=" .. tostring(ok) .. " detail=" .. tostring(why))
+            end
+        elseif carrier_faction == assault_attacker_faction and not assault_secured then
+            assault_secured = true
+            assault_deadline = os.time() + secured_time
+            assault_phase_timed = phase
+            assault_illegal_carrier = nil
+            set_phase_time(game_state, secured_time, "attacker secured briefcase")
+            append("VAULT ASSAULT BRIEFCASE SECURED by " .. spy_name(carrier) ..
+                   " (faction " .. tostring(carrier_faction) .. "); extraction " ..
+                   "deadline in " .. tostring(secured_time) .. "s")
+        end
+    else
+        assault_illegal_carrier = nil
+    end
+
+    -- A stock phase change installs that phase's normal duration. Reapply only
+    -- on the transition, using the remaining shared deadline, so the initial
+    -- assault is one 120-second budget and pickup -> arrival -> extraction is
+    -- one 60-second budget.
+    if assault_deadline ~= nil then
+        local remaining = assault_deadline - os.time()
+        if phase ~= assault_phase_timed then
+            assault_phase_timed = phase
+            set_phase_time(game_state, remaining,
+                           "shared extraction deadline in " .. phase_label(phase))
+        end
+        if remaining <= 1 then
+            mark_defender_winners()
+            if not assault_timeout_advanced then
+                assault_timeout_advanced = true
+                local ok, err = pcall(function() game_state:AdvancePhase(true) end)
+                append("vault assault timeout AdvancePhase(true) at " ..
+                       phase_label(phase) .. " ok=" .. tostring(ok) ..
+                       " error=" .. tostring(err))
+            end
+        end
+    end
 end
 
 -- ASpy::CheatDisguiseGiveSecurityLevelSrv(ESecurityLevel) is the game's own
@@ -1184,8 +1917,10 @@ local function consume_trigger()
     advance_attempted = false
     teleport_attempts = 0
     carrier_prepared = false
+    reset_vault_assault_state()
     last_logged_phase = nil
-    append("extraction mode armed; carrier_filter=" .. tostring(carrier_filter))
+    append("extraction mode armed; mode=" .. extraction_mode ..
+           " carrier_filter=" .. tostring(carrier_filter))
     -- Name the designated player immediately when one is already connected, so
     -- a test run can confirm the right human was picked before the vault opens.
     local controller, why = find_carrier_controller()
@@ -1247,8 +1982,10 @@ RegisterHook("/Script/Engine.GameModeBase:StartPlay", function()
         advance_attempted = false
         teleport_attempts = 0
         carrier_prepared = false
+        reset_vault_assault_state()
         last_logged_phase = nil
-        append("map (re)started; armed extraction mode reset to waiting")
+        append("map (re)started; armed " .. extraction_mode ..
+               " mode reset to waiting")
     end
 end)
 
@@ -1277,11 +2014,41 @@ local function load_config()
     end
     fh:close()
 
+    if settings.mode and settings.mode ~= "" then
+        local selected = settings.mode:lower()
+        if selected == "vault_assault" or selected == "carrier_extraction" then
+            extraction_mode = selected
+            append("extraction mode from config: " .. extraction_mode)
+        else
+            append("config mode '" .. settings.mode .. "' not recognised; using " ..
+                   extraction_mode)
+        end
+    end
+    local configured_assault_time = tonumber(settings.assaulttime)
+    if configured_assault_time and configured_assault_time >= 10 then
+        assault_time = math.floor(configured_assault_time)
+    end
+    local configured_secured_time = tonumber(settings.securedtime)
+    if configured_secured_time and configured_secured_time >= 10 then
+        secured_time = math.floor(configured_secured_time)
+    end
+    configured_defender_faction = tonumber(settings.defenderfaction)
+    configured_attacker_faction = tonumber(settings.attackerfaction)
+    if settings.teleportdefenders ~= nil then
+        local value = settings.teleportdefenders:lower()
+        teleport_defenders = value == "1" or value == "true" or value == "yes"
+    end
+    if settings.removeambientnpcs ~= nil then
+        local value = settings.removeambientnpcs:lower()
+        remove_ambient_npcs = value == "1" or value == "true" or value == "yes"
+    end
+
     if settings.autoarm == "1" or (settings.autoarm or ""):lower() == "true" then
         armed = true
         advance_attempted = false
         teleport_attempts = 0
         carrier_prepared = false
+        reset_vault_assault_state()
         last_logged_phase = nil
         append("auto-armed from DIConfig.ini [Extraction] AutoArm")
     end
@@ -1305,9 +2072,23 @@ local function load_config()
             append("config disguise '" .. settings.disguise .. "' not recognised")
         end
     end
+    if extraction_mode == "vault_assault" then
+        append("vault assault config: assault_time=" .. assault_time ..
+               " secured_time=" .. secured_time ..
+               " defender_faction=" .. tostring(configured_defender_faction) ..
+               " attacker_faction=" .. tostring(configured_attacker_faction) ..
+               " teleport_defenders=" .. tostring(teleport_defenders) ..
+               " remove_ambient_npcs=" .. tostring(remove_ambient_npcs))
+    end
 end
 
 pcall(load_config)
+
+-- Do not RegisterHook the global interaction/condition UFunctions here. They
+-- execute at very high frequency during intro and traversing UObject state from
+-- those UE4SS callbacks caused an access violation in the live server. The
+-- once-per-second vault_assault_tick fallback is intentionally retained while
+-- attacker-only interaction is moved to a non-hook implementation.
 
 append("DIExtraction loaded; write " .. TRIGGER .. " to arm, " ..
        RECON .. " for a state dump, " .. LOADOUT .. " to grant resources")

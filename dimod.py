@@ -675,6 +675,16 @@ def cmd_vanilla(remove_ue4ss=False):
 # to which profile is deployed.
 WATCHER_PID = os.path.join(KIT, ".scrims-watcher.pid")
 
+# The shipping dedicated server deliberately exits after RESULT_SCREEN and
+# when the last human leaves an active match. A profile can opt into a tiny
+# external supervisor that launches the same deployed configuration again.
+# These files live beside the server rather than inside one checkout, so two
+# worktrees cannot accidentally start two supervisors for the same executable.
+SERVER_WATCHDOG_PID = os.path.join(WIN64, "DIModServerWatchdog.pid")
+SERVER_WATCHDOG_STOP = os.path.join(WIN64, "DIModServerWatchdog.stop")
+SERVER_WATCHDOG_READY = os.path.join(WIN64, "DIModServerWatchdog.ready")
+SERVER_WATCHDOG_LOG = os.path.join(WIN64, "DIModServerWatchdog.log")
+
 
 def python_exe():
     exe = sys.executable
@@ -868,6 +878,85 @@ def stop_scrims_watcher():
     print(c("d", f"  scrims watcher stopped (pid {pid})"))
 
 
+def server_watchdog_pid():
+    """Return the one machine-wide server supervisor, clearing stale state."""
+    try:
+        with open(SERVER_WATCHDOG_PID, encoding="ascii") as f:
+            pid = int(f.read().strip())
+    except Exception:
+        return None
+    if pid_alive(pid):
+        return pid
+    try:
+        os.remove(SERVER_WATCHDOG_PID)
+    except OSError:
+        pass
+    return None
+
+
+def start_server_watchdog():
+    running = server_watchdog_pid()
+    if running:
+        print(c("y", f"  persistent server supervisor already running (pid {running})"))
+        return 0
+    script = os.path.join(KIT, "tools", "server_watchdog.py")
+    if not os.path.isfile(script):
+        print(c("r", "  tools/server_watchdog.py missing"))
+        return 1
+    for marker in (SERVER_WATCHDOG_STOP, SERVER_WATCHDOG_READY):
+        try:
+            os.remove(marker)
+        except OSError:
+            pass
+    flags = (getattr(subprocess, "CREATE_NO_WINDOW", 0) |
+             getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    try:
+        proc = subprocess.Popen(
+            [python_exe(), script], cwd=KIT, creationflags=flags,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(c("r", f"  persistent server supervisor failed to start: {e}"))
+        return 1
+    with open(SERVER_WATCHDOG_PID, "w", encoding="ascii") as f:
+        f.write(str(proc.pid))
+
+    # inject.py normally takes 8-10 seconds. Report a useful outcome to CLI/GUI
+    # callers without keeping this launcher attached to the long-lived server.
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if os.path.isfile(SERVER_WATCHDOG_READY):
+            print(c("g", f"  persistent server supervisor ready (pid {proc.pid})"))
+            print(c("d", "    completed matches relaunch automatically"))
+            return 0
+        if proc.poll() is not None:
+            print(c("r", "  persistent server supervisor exited during startup"))
+            return 1
+        time.sleep(0.2)
+    print(c("y", f"  persistent server supervisor is still starting (pid {proc.pid})"))
+    print(c("d", f"    inspect {SERVER_WATCHDOG_LOG}"))
+    return 0
+
+
+def stop_server_watchdog():
+    pid = server_watchdog_pid()
+    if not pid:
+        return
+    try:
+        with open(SERVER_WATCHDOG_STOP, "w", encoding="ascii") as f:
+            f.write("STOP\n")
+    except OSError:
+        pass
+    for _ in range(20):
+        if not pid_alive(pid):
+            print(c("d", f"  persistent server supervisor stopped (pid {pid})"))
+            return
+        time.sleep(0.25)
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                   capture_output=True, text=True)
+    print(c("d", f"  persistent server supervisor terminated (pid {pid})"))
+
+
 def cmd_launch(mode=None):
     if server_pid():
         print(c("y", "  server already running"))
@@ -905,6 +994,8 @@ def cmd_launch(mode=None):
             exe = cand
     active = load_state().get("profile")
     profile = profiles().get(active, {})
+    if profile.get("persistent_server"):
+        return start_server_watchdog()
     native_modules = profile.get("native_modules", [])
     launch_env = os.environ.copy()
     if any(m in ("DINativeSpectatorStage2", "DINativeSpectatorStage3")
@@ -939,6 +1030,9 @@ def cmd_stop():
     import ctypes
     import ctypes.wintypes as w
     stop_scrims_watcher()
+    # Stop the supervisor first; otherwise killing the game process is
+    # indistinguishable from a completed match and it immediately comes back.
+    stop_server_watchdog()
     pid = server_pid()
     if not pid:
         print(c("d", "  server not running"))
