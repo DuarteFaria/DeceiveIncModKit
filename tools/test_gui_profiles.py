@@ -15,6 +15,14 @@ from profile_schema import FIELDS, ProfileDraft, mod_fields, unknown_paths
 
 
 class ProfileDraftTests(unittest.TestCase):
+    def test_heat_and_cover_regeneration_are_gameplay_rules(self):
+        fields = {field.path: field for field in FIELDS}
+        for path in ("diconfig.Gameplay.DisableHeat",
+                     "diconfig.Gameplay.DisableCoverRegeneration"):
+            self.assertIn(path, fields)
+            self.assertEqual("gameplay", fields[path].group)
+            self.assertEqual("DIConfig", fields[path].needs_mod)
+
     def test_remove_ambient_npcs_is_a_gameplay_rule(self):
         fields = {field.path: field for field in FIELDS}
         self.assertIn("diconfig.Gameplay.RemoveAmbientNPCs", fields)

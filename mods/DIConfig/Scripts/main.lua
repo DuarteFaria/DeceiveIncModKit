@@ -8,6 +8,8 @@
 -- [Gameplay]
 -- DisableSuspicion = 0    ; applies to every game mode
 -- DisableCover     = 0    ; keeps agents permanently out of cover
+-- DisableHeat      = 0    ; prevents heat gain and clears existing heat
+-- DisableCoverRegeneration = 0 ; cover can be lost but will not recharge
 -- RemoveAmbientNPCs = 0   ; all modes; implemented by DIExtraction
 
 local INI = "DIConfig.ini"
@@ -29,6 +31,8 @@ local function load_ini()
             out:write("\n[Gameplay]\n")
             out:write("DisableSuspicion = 0\n")
             out:write("DisableCover = 0\n")
+            out:write("DisableHeat = 0\n")
+            out:write("DisableCoverRegeneration = 0\n")
             out:write("RemoveAmbientNPCs = 0\n")
             out:close()
         end
@@ -126,9 +130,139 @@ end
 
 local disable_suspicion = false
 local disable_cover = false
+local disable_heat = false
+local disable_cover_regeneration = false
 local gameplay_ready = {}
 local gameplay_last_error = {}
 local gameplay_last_combat_cleanup = {}
+local GAMEPLAY_BLOCK_SECONDS = 3600000.0
+
+local function suppress_heat(pawn)
+    local before = {}
+    local read_ok = pcall(function()
+        before.level = unwrap(pawn.HeatState.HeatLevel)
+        before.count = unwrap(pawn.HeatState.HeatCount)
+        before.scold = unwrap(pawn.HeatSetup.ScoldHeatPerSeccond)
+        before.spy_hit = unwrap(pawn.HeatSetup.HeatDelayForSpyHit)
+        before.passive = unwrap(pawn.HeatSetup.HeatDelayPassiveGain)
+        before.post_cover = unwrap(pawn.HeatSetup.HeatDelayAggroPostCover)
+    end)
+    if not read_ok or type(before.level) ~= "number" or
+       type(before.count) ~= "number" then
+        return false, "heat properties unavailable", false, ""
+    end
+
+    local changed = before.level ~= 0 or before.count ~= 0 or
+                    before.scold ~= 0 or
+                    before.spy_hit ~= GAMEPLAY_BLOCK_SECONDS or
+                    before.passive ~= GAMEPLAY_BLOCK_SECONDS or
+                    before.post_cover ~= GAMEPLAY_BLOCK_SECONDS
+
+    -- Let the native decrement path remove any active heat penalties first;
+    -- direct replicated writes then close the race with another heat source.
+    if before.count > 0 then
+        pcall(function() pawn:DecrementHeat(before.count) end)
+    end
+
+    local write_ok, write_error = pcall(function()
+        pawn.HeatState.HeatLevel = 0
+        pawn.HeatState.HeatCount = 0
+        pawn.HeatSetup.ScoldHeatPerSeccond = 0.0
+        pawn.HeatSetup.HeatDelayForSpyHit = GAMEPLAY_BLOCK_SECONDS
+        pawn.HeatSetup.HeatDelayPassiveGain = GAMEPLAY_BLOCK_SECONDS
+        pawn.HeatSetup.HeatDelayAggroPostCover = GAMEPLAY_BLOCK_SECONDS
+
+        local npc_damage = pawn.HeatSetup.NPCDamageHeatPerPool
+        if npc_damage ~= nil then
+            for i = 1, #npc_damage do
+                if unwrap(npc_damage[i]) ~= 0 then changed = true end
+                npc_damage[i] = 0
+            end
+        end
+    end)
+    if not write_ok then
+        return false, "heat write failed: " .. tostring(write_error),
+               changed, ""
+    end
+
+    local after = {}
+    local sources_zero = true
+    local verify_ok = pcall(function()
+        after.level = unwrap(pawn.HeatState.HeatLevel)
+        after.count = unwrap(pawn.HeatState.HeatCount)
+        after.scold = unwrap(pawn.HeatSetup.ScoldHeatPerSeccond)
+        after.spy_hit = unwrap(pawn.HeatSetup.HeatDelayForSpyHit)
+        after.passive = unwrap(pawn.HeatSetup.HeatDelayPassiveGain)
+        after.post_cover = unwrap(pawn.HeatSetup.HeatDelayAggroPostCover)
+        local npc_damage = pawn.HeatSetup.NPCDamageHeatPerPool
+        if npc_damage ~= nil then
+            for i = 1, #npc_damage do
+                if unwrap(npc_damage[i]) ~= 0 then sources_zero = false end
+            end
+        end
+    end)
+    local verified = verify_ok and after.level == 0 and after.count == 0 and
+        after.scold == 0 and after.spy_hit == GAMEPLAY_BLOCK_SECONDS and
+        after.passive == GAMEPLAY_BLOCK_SECONDS and
+        after.post_cover == GAMEPLAY_BLOCK_SECONDS and sources_zero
+    local detail = string.format(
+        "heat[level=%s count=%s npc_sources_zero=%s]",
+        tostring(after.level), tostring(after.count), tostring(sources_zero))
+    return verified, verified and nil or "heat read-back failed", changed,
+           detail
+end
+
+local function suppress_cover_regeneration(pawn)
+    local fields = {
+        "TimeBeforeStartingRecover",
+        "TimeToRecoverIdling", "TimeToRecoverWalking", "TimeToRecoverRunning",
+        "TimeToRecoverInCoverIdling", "TimeToRecoverInCoverWalking",
+        "TimeToRecoverInCoverRunning",
+    }
+    local before = {}
+    local read_ok = pcall(function()
+        for _, field in ipairs(fields) do before[field] = unwrap(pawn[field]) end
+    end)
+    if not read_ok then
+        return false, "cover regeneration properties unavailable", false, ""
+    end
+
+    local changed = false
+    for _, field in ipairs(fields) do
+        if type(before[field]) ~= "number" then
+            return false, "cover regeneration field unavailable: " .. field,
+                   changed, ""
+        end
+        if before[field] ~= GAMEPLAY_BLOCK_SECONDS then changed = true end
+    end
+
+    if changed then
+        local write_ok, write_error = pcall(function()
+            for _, field in ipairs(fields) do
+                pawn[field] = GAMEPLAY_BLOCK_SECONDS
+            end
+        end)
+        if not write_ok then
+            return false,
+                   "cover regeneration write failed: " .. tostring(write_error),
+                   changed, ""
+        end
+    end
+
+    local verified = true
+    local verify_ok = pcall(function()
+        for _, field in ipairs(fields) do
+            if unwrap(pawn[field]) ~= GAMEPLAY_BLOCK_SECONDS then
+                verified = false
+            end
+        end
+    end)
+    verified = verify_ok and verified
+    local detail = "cover_regeneration[blocked=" .. tostring(verified) .. "]"
+    return verified,
+           verified and nil or "cover regeneration read-back failed",
+           changed, detail
+end
 
 local function suppress_suspicion(pawn)
     local changed = false
@@ -352,12 +486,26 @@ local function suppress_cover(pawn, game_state)
 end
 
 local function apply_gameplay()
-    if not disable_suspicion and not disable_cover then return end
+    if not disable_suspicion and not disable_cover and not disable_heat and
+       not disable_cover_regeneration then return end
     local is_active, game_state = active_match()
     if not is_active then return end
     for _, pawn in ipairs(live_spies()) do
         local key = full(pawn)
         local ok, changed, reasons, details = true, false, {}, {}
+        if disable_heat then
+            local worked, why, altered, detail = suppress_heat(pawn)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
+        if disable_cover_regeneration then
+            local worked, why, altered, detail =
+                suppress_cover_regeneration(pawn)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
         if disable_suspicion then
             local worked, why, altered, detail = suppress_suspicion(pawn)
             ok, changed = ok and worked, changed or altered
@@ -481,11 +629,15 @@ end
 load_ini()
 disable_suspicion = enabled(cfg.DisableSuspicion)
 disable_cover = enabled(cfg.DisableCover)
+disable_heat = enabled(cfg.DisableHeat)
+disable_cover_regeneration = enabled(cfg.DisableCoverRegeneration)
 log("config: LobbyWaitTime=" .. tostring(cfg.LobbyWaitTime) ..
     " IntroPhaseTime=" .. tostring(cfg.IntroPhaseTime) ..
     " MaxSpectators=" .. tostring(cfg.MaxSpectators) ..
     " DisableSuspicion=" .. tostring(disable_suspicion) ..
     " DisableCover=" .. tostring(disable_cover) ..
+    " DisableHeat=" .. tostring(disable_heat) ..
+    " DisableCoverRegeneration=" .. tostring(disable_cover_regeneration) ..
     " RemoveAmbientNPCs=" .. tostring(cfg.RemoveAmbientNPCs))
 
 -- TIMING MATTERS. The game copies DefaultPhaseDuration out of the data asset

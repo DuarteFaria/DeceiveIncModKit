@@ -46,6 +46,32 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
         self.assertIn("after.disabled == true", suppression)
         self.assertIn("after.ratio == 0", suppression)
 
+    def test_heat_is_prevented_at_sources_and_cleared(self):
+        start = self.source.index("local function suppress_heat")
+        stop = self.source.index("local function suppress_cover_regeneration",
+                                 start)
+        suppression = self.source[start:stop]
+        self.assertIn("pawn:DecrementHeat(before.count)", suppression)
+        self.assertIn("pawn.HeatState.HeatLevel = 0", suppression)
+        self.assertIn("pawn.HeatState.HeatCount = 0", suppression)
+        self.assertIn("pawn.HeatSetup.NPCDamageHeatPerPool", suppression)
+        self.assertIn("pawn.HeatSetup.ScoldHeatPerSeccond = 0.0", suppression)
+        self.assertIn("npc_damage[i] = 0", suppression)
+        self.assertIn("sources_zero", suppression)
+
+    def test_cover_regeneration_is_stalled_without_removing_cover(self):
+        start = self.source.index("local function suppress_cover_regeneration")
+        stop = self.source.index("local function suppress_suspicion", start)
+        suppression = self.source[start:stop]
+        for field in (
+                "TimeBeforeStartingRecover", "TimeToRecoverIdling",
+                "TimeToRecoverWalking", "TimeToRecoverRunning",
+                "TimeToRecoverInCoverIdling", "TimeToRecoverInCoverWalking",
+                "TimeToRecoverInCoverRunning"):
+            self.assertIn(f'"{field}"', suppression)
+        self.assertNotIn("CoverRatio = 0", suppression)
+        self.assertNotIn("bCheatDisableCover", suppression)
+
     def test_disabled_cover_removes_only_stock_combat_protection(self):
         start = self.source.index("local function remove_combat_spawn_protection")
         stop = self.source.index("local function suppress_cover", start)
@@ -71,6 +97,8 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
     def test_settings_are_loaded_as_general_diconfig_values(self):
         self.assertIn("enabled(cfg.DisableSuspicion)", self.source)
         self.assertIn("enabled(cfg.DisableCover)", self.source)
+        self.assertIn("enabled(cfg.DisableHeat)", self.source)
+        self.assertIn("enabled(cfg.DisableCoverRegeneration)", self.source)
         self.assertIn('out:write("RemoveAmbientNPCs = 0\\n")', self.source)
         self.assertIn('tostring(cfg.RemoveAmbientNPCs)', self.source)
 

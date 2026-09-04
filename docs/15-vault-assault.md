@@ -60,6 +60,10 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   invulnerability and disguise-shield modifiers are removed after deployment so
   bots and humans use the same damage path. All reflected controls are read back
   before the agent is logged as ready.
+- `DisableHeat=1` keeps every agent's replicated heat at zero and disables
+  NPC-hit, scold, and passive heat sources. `DisableCoverRegeneration=1` stalls
+  every passive cover-recovery timer; it is independent of `DisableCover`,
+  which this profile also enables to keep agents permanently exposed.
 - Attackers have 120 seconds to pick up the briefcase. Their first valid pickup
   replaces the clock with a single 60-second extraction deadline. That deadline
   continues if the case is dropped and is carried across stock extraction phase
@@ -85,6 +89,8 @@ under `[Extraction]` in `DIConfig.ini`:
 [Gameplay]
 DisableSuspicion = 1
 DisableCover = 1
+DisableHeat = 1
+DisableCoverRegeneration = 1
 RemoveAmbientNPCs = 1
 
 [Extraction]
@@ -102,7 +108,7 @@ Omitting both faction ids makes the mod select the two lowest live faction ids.
 `TeleportDefenders = 0` leaves both teams at their stock spawn points.
 `RemoveAmbientNPCs = 0` restores the stock wandering population. This gameplay
 rule requires `DIExtraction` but applies to every game mode, not only vault
-assault. The other two `[Gameplay]` settings are owned by `DIConfig` and are
+assault. The other four `[Gameplay]` settings are owned by `DIConfig` and are
 also mode-independent. `DisableCover=1` suppresses DIExtraction's
 forced-disguise option so the two systems cannot fight each other. Both are
 available under **Gameplay rules** in the profile editor. The cover rule uses
