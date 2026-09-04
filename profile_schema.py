@@ -53,7 +53,7 @@ FIELDS = (
     Field("diconfig.Gameplay.RemoveAmbientNPCs", "Remove ambient NPCs",
           "bool01", "gameplay",
           help="All modes; keeps agent bots but removes wandering map NPCs",
-          needs_mod="DIExtraction"),
+          needs_mod="DIConfig"),
     Field("diconfig.Extraction.Mode", "Behavior", "enum", "extraction",
           choices=("", "carrier_extraction", "vault_assault"),
           help="Choose the original carrier mode or 3v3 vault assault",
