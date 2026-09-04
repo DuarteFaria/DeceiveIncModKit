@@ -12,7 +12,8 @@
     },
     "Gameplay": {
       "DisableSuspicion": 1,
-      "DisableCover": 1
+      "DisableCover": 1,
+      "RemoveAmbientNPCs": 1
     },
     "Extraction": {
       "Mode": "vault_assault",
@@ -22,8 +23,7 @@
       "SecuredTime": 60,
       "DefenderFaction": 0,
       "AttackerFaction": 1,
-      "TeleportDefenders": 1,
-      "RemoveAmbientNPCs": 1
+      "TeleportDefenders": 1
     }
   },
   "tripwire": {

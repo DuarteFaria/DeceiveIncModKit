@@ -13,9 +13,10 @@ python dimod.py logs 80
 
 The profile runs Diamondspire with six slots and one human plus five difficult
 player bots. `bFillWithBots=True` asks the stock server to keep empty player
-slots filled during testing. `RemoveAmbientNPCs=1` neutralizes only the map's
-manager-owned `NPCCharacter` actors (civilians, staff, guards, technicians, and
-VIPs); agents and agent bots are separate `Spy` actors and remain in the match.
+slots filled during testing. `[Gameplay] RemoveAmbientNPCs=1` neutralizes only
+the map's manager-owned `NPCCharacter` actors (civilians, staff, guards,
+technicians, and VIPs); agents and agent bots are separate `Spy` actors and
+remain in the match.
 The NPC actors stay registered internally so the population manager does not
 continually respawn them. Their separate `NPCAIActor`, behavior machine, combat
 components such as `NPCGuardComponent`, and other additional components are
@@ -84,6 +85,7 @@ under `[Extraction]` in `DIConfig.ini`:
 [Gameplay]
 DisableSuspicion = 1
 DisableCover = 1
+RemoveAmbientNPCs = 1
 
 [Extraction]
 Mode = vault_assault
@@ -94,14 +96,14 @@ SecuredTime = 60
 DefenderFaction = 0
 AttackerFaction = 1
 TeleportDefenders = 1
-RemoveAmbientNPCs = 1
 ```
 
 Omitting both faction ids makes the mod select the two lowest live faction ids.
 `TeleportDefenders = 0` leaves both teams at their stock spawn points.
-`RemoveAmbientNPCs = 0` restores the stock wandering population.
-The two `[Gameplay]` settings are owned by `DIConfig` and apply to every game
-mode, not only vault assault. `DisableCover=1` also suppresses DIExtraction's
+`RemoveAmbientNPCs = 0` restores the stock wandering population. This gameplay
+rule requires `DIExtraction` but applies to every game mode, not only vault
+assault. The other two `[Gameplay]` settings are owned by `DIConfig` and are
+also mode-independent. `DisableCover=1` suppresses DIExtraction's
 forced-disguise option so the two systems cannot fight each other. Both are
 available under **Gameplay rules** in the profile editor. The cover rule uses
 replicated scalar/undercover state and deliberately does not invoke the stock

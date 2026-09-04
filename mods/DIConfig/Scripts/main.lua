@@ -8,6 +8,7 @@
 -- [Gameplay]
 -- DisableSuspicion = 0    ; applies to every game mode
 -- DisableCover     = 0    ; keeps agents permanently out of cover
+-- RemoveAmbientNPCs = 0   ; all modes; implemented by DIExtraction
 
 local INI = "DIConfig.ini"
 local cfg = {}
@@ -28,6 +29,7 @@ local function load_ini()
             out:write("\n[Gameplay]\n")
             out:write("DisableSuspicion = 0\n")
             out:write("DisableCover = 0\n")
+            out:write("RemoveAmbientNPCs = 0\n")
             out:close()
         end
         fh = io.open(INI, "r")
@@ -483,7 +485,8 @@ log("config: LobbyWaitTime=" .. tostring(cfg.LobbyWaitTime) ..
     " IntroPhaseTime=" .. tostring(cfg.IntroPhaseTime) ..
     " MaxSpectators=" .. tostring(cfg.MaxSpectators) ..
     " DisableSuspicion=" .. tostring(disable_suspicion) ..
-    " DisableCover=" .. tostring(disable_cover))
+    " DisableCover=" .. tostring(disable_cover) ..
+    " RemoveAmbientNPCs=" .. tostring(cfg.RemoveAmbientNPCs))
 
 -- TIMING MATTERS. The game copies DefaultPhaseDuration out of the data asset
 -- when the pregame phase begins (ADeceiveIncMatchGameState::

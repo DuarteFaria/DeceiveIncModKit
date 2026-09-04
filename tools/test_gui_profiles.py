@@ -15,6 +15,14 @@ from profile_schema import FIELDS, ProfileDraft, mod_fields, unknown_paths
 
 
 class ProfileDraftTests(unittest.TestCase):
+    def test_remove_ambient_npcs_is_a_gameplay_rule(self):
+        fields = {field.path: field for field in FIELDS}
+        self.assertIn("diconfig.Gameplay.RemoveAmbientNPCs", fields)
+        self.assertNotIn("diconfig.Extraction.RemoveAmbientNPCs", fields)
+        rule = fields["diconfig.Gameplay.RemoveAmbientNPCs"]
+        self.assertEqual("gameplay", rule.group)
+        self.assertEqual("DIExtraction", rule.needs_mod)
+
     def test_profile_helpers_use_stable_json_and_reject_traversal(self):
         previous = dimod.PROFILES
         try:

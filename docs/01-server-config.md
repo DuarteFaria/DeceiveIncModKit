@@ -165,12 +165,14 @@ general gameplay section can disable cover and suspicion for any stock mode:
 [Gameplay]
 DisableSuspicion = 1
 DisableCover = 1
+RemoveAmbientNPCs = 1
 ```
 
-These are shown under **Gameplay rules** in the profile editor and require the
-core `DIConfig` module. They are not native `TripwireServer.ini` keys. Cover is
-suppressed through replicated scalar and undercover-state fields; the stock
-`AllowCover`
+These are shown under **Gameplay rules** in the profile editor and are not
+native `TripwireServer.ini` keys. Suspicion and cover require the core
+`DIConfig` module. Ambient-NPC removal requires `DIExtraction`, applies to every
+game mode, and leaves agent bots in place. Cover is suppressed through
+replicated scalar and undercover-state fields; the stock `AllowCover`
 transition is unsafe on the dedicated server because it exits the process when
 the match begins. This controls gameplay but cannot delete the HUD widget from an
 unmodified client.

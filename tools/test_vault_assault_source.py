@@ -144,6 +144,21 @@ class VaultAssaultSourceTests(unittest.TestCase):
         config = self.source.index("pcall(load_config)")
         self.assertIn("LoopAsync(100, function()", self.source[config:])
 
+    def test_npc_removal_is_a_server_wide_gameplay_rule(self):
+        self.assertIn("gameplay_settings.removeambientnpcs", self.source)
+        self.assertIn("ambient_setting = settings.removeambientnpcs", self.source)
+        config = self.source.index("pcall(load_config)")
+        background = self.source[config:]
+        self.assertIn("if remove_ambient_npcs then", background)
+        self.assertNotIn(
+            'extraction_mode == "vault_assault" and remove_ambient_npcs',
+            background)
+        start_play = self.source.index(
+            'RegisterHook("/Script/Engine.GameModeBase:StartPlay"')
+        load_config = self.source.index("local function load_config", start_play)
+        reset = self.source[start_play:load_config]
+        self.assertIn("if armed or remove_ambient_npcs then", reset)
+
     def test_npc_combat_is_disabled_before_batched_cleanup(self):
         self.assertIn('FindAllOf("EncounterManager")', self.source)
         self.assertIn('FindAllOf("EncounterDataAsset")', self.source)

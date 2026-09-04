@@ -2569,14 +2569,18 @@ LoopAsync(1000, function()
 end)
 
 RegisterHook("/Script/Engine.GameModeBase:StartPlay", function()
-    if armed then
+    if armed or remove_ambient_npcs then
         advance_attempted = false
         teleport_attempts = 0
         carrier_prepared = false
         reset_vault_assault_state()
         last_logged_phase = nil
+    end
+    if armed then
         append("map (re)started; armed " .. extraction_mode ..
                " mode reset to waiting")
+    elseif remove_ambient_npcs then
+        append("map (re)started; [Gameplay] RemoveAmbientNPCs reset")
     end
 end)
 
@@ -2637,10 +2641,23 @@ local function load_config()
         local value = settings.teleportdefenders:lower()
         teleport_defenders = value == "1" or value == "true" or value == "yes"
     end
-    if settings.removeambientnpcs ~= nil then
-        local value = settings.removeambientnpcs:lower()
+    -- RemoveAmbientNPCs is a server-wide gameplay rule. Keep the old
+    -- [Extraction] location as a compatibility fallback for existing custom
+    -- profiles, but let [Gameplay] win when both are present.
+    local ambient_setting = gameplay_settings.removeambientnpcs
+    if ambient_setting == nil then
+        ambient_setting = settings.removeambientnpcs
+        if ambient_setting ~= nil then
+            append("deprecated [Extraction] RemoveAmbientNPCs; move it to " ..
+                   "[Gameplay]")
+        end
+    end
+    if ambient_setting ~= nil then
+        local value = ambient_setting:lower()
         remove_ambient_npcs = value == "1" or value == "true" or value == "yes"
     end
+    append("gameplay rule RemoveAmbientNPCs=" ..
+           tostring(remove_ambient_npcs))
 
     if settings.autoarm == "1" or (settings.autoarm or ""):lower() == "true" then
         armed = true
@@ -2689,7 +2706,7 @@ pcall(load_config)
 -- UE4SS loads this module on LVL_StartupServer, before travel to the operation
 -- map. Mutate the already-loaded spawn data here so PopulationManager copies a
 -- zero count during its BeginPlay instead of racing the one-second game loop.
-if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
+if remove_ambient_npcs then
     local changed, err = disable_ambient_npc_spawn_assets()
     if err ~= nil then
         append("early ambient NPC spawn-data override failed: " .. tostring(err))
@@ -2703,7 +2720,7 @@ end
 -- Keep it off the round-flow loop and process only a couple of actors at a time
 -- so player staging, loadout, timers, and objective state stay responsive.
 LoopAsync(100, function()
-    if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
+    if remove_ambient_npcs then
         pcall(disable_ambient_npc_combat)
         pcall(remove_ambient_npcs_tick)
     end

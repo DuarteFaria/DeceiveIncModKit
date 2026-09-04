@@ -71,6 +71,8 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
     def test_settings_are_loaded_as_general_diconfig_values(self):
         self.assertIn("enabled(cfg.DisableSuspicion)", self.source)
         self.assertIn("enabled(cfg.DisableCover)", self.source)
+        self.assertIn('out:write("RemoveAmbientNPCs = 0\\n")', self.source)
+        self.assertIn('tostring(cfg.RemoveAmbientNPCs)', self.source)
 
 
 if __name__ == "__main__":
