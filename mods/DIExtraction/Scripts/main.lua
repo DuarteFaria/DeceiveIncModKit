@@ -1999,7 +1999,10 @@ vault_assault_tick = function()
             set_phase_time(game_state, remaining,
                            "shared extraction deadline in " .. phase_label(phase))
         end
-        if remaining <= 1 then
+        -- os.time() has one-second resolution. Expiring at <= 1 made every
+        -- configured deadline finish roughly one second early, while the HUD
+        -- could still be displaying that final second.
+        if remaining <= 0 then
             mark_defender_winners()
             if not assault_timeout_advanced then
                 assault_timeout_advanced = true

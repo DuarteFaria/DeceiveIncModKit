@@ -214,5 +214,9 @@ class VaultAssaultSourceTests(unittest.TestCase):
         self.assertLess(advance, reassert)
         self.assertLess(reassert, log)
 
+    def test_timeout_does_not_skip_the_final_displayed_second(self):
+        self.assertIn("if remaining <= 0 then", self.source)
+        self.assertNotIn("if remaining <= 1 then", self.source)
+
 if __name__ == "__main__":
     unittest.main()
