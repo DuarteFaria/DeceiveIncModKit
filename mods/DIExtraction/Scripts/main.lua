@@ -391,12 +391,84 @@ end
 -- PopulationManager creates NPCCharacter actors from its own data asset, so a
 -- server-only prototype has to neutralize those actors after they appear. Keep
 -- the actors registered with PopulationManager: destroying them makes the game
--- replenish them immediately and can produce a runaway spawn loop. Hiding them,
--- disabling collision/tick, and forcing a net update removes them from play
--- while keeping the manager's population accounting satisfied.
+-- replenish them immediately and can produce a runaway spawn loop. Each
+-- NPCCharacter owns a separate NPCAIActor; hiding only the character leaves that
+-- actor's behavior stack alive and guards can still shoot while invisible. Stop
+-- the AI actor, its behavior machine, and live additional components (including
+-- NPCGuardComponent) before hiding the character.
 -- Use PopulationManager.AllNPCs instead of FindAllOf("NPCCharacter"): a spy's
 -- cover/disguise representation is also an NPCCharacter, but is not part of the
 -- manager's ambient population. ASpy itself is also a separate ACharacter type.
+local function stop_npc_component(component)
+    if component == nil or not is_live(component) then return true, nil end
+    local tick_stopped, tick_err = pcall(function()
+        component:SetComponentTickEnabled(false)
+    end)
+    if not tick_stopped then return false, describe_error(tick_err) end
+
+    -- Deactivation is best effort. Some map-created behavior wrappers reject
+    -- this otherwise-standard ActorComponent call, but disabling and verifying
+    -- their component tick is the authoritative part of quarantine.
+    pcall(function() component:Deactivate() end)
+
+    local tick_enabled
+    local verified, verify_err = pcall(function()
+        tick_enabled = unwrap(component:IsComponentTickEnabled())
+    end)
+    if not verified then return false, describe_error(verify_err) end
+    if tick_enabled ~= false then return false, "component remained ticking" end
+    return true, nil
+end
+
+local function stop_ambient_npc_ai(npc)
+    local ai
+    local ai_ok, ai_err = pcall(function() ai = unwrap(npc.NPCAI) end)
+    if not ai_ok then return false, describe_error(ai_err) end
+    if ai == nil or not is_live(ai) then return false, "NPCAI not ready" end
+
+    local actor_ok, actor_err = pcall(function()
+        ai:SetActorTickEnabled(false)
+    end)
+    if not actor_ok then return false, describe_error(actor_err) end
+
+    local behavior_machine
+    local machine_read_ok, machine_read_err = pcall(function()
+        behavior_machine = unwrap(ai.BehaviorMachine)
+    end)
+    if not machine_read_ok then
+        return false, "BehaviorMachine unavailable: " ..
+                      describe_error(machine_read_err)
+    end
+    local machine_ok, machine_err = stop_npc_component(behavior_machine)
+    if not machine_ok then
+        return false, "BehaviorMachine: " .. tostring(machine_err)
+    end
+
+    local additional
+    pcall(function() additional = ai.AdditionalComponents end)
+    if additional then
+        local count = 0
+        pcall(function() count = #additional end)
+        for i = 1, count do
+            local component
+            pcall(function() component = unwrap(additional[i]) end)
+            local component_ok, component_err = stop_npc_component(component)
+            if not component_ok then
+                return false, "AdditionalComponents[" .. tostring(i) ..
+                              "]: " .. tostring(component_err)
+            end
+        end
+    end
+
+    local actor_tick
+    local verify_ok, verify_err = pcall(function()
+        actor_tick = unwrap(ai:IsActorTickEnabled())
+    end)
+    if not verify_ok then return false, describe_error(verify_err) end
+    if actor_tick ~= false then return false, "NPCAI actor remained ticking" end
+    return true, nil
+end
+
 local function remove_ambient_npcs_tick()
     if not remove_ambient_npcs then return end
     local managers
@@ -446,30 +518,37 @@ local function remove_ambient_npcs_tick()
         local npc = targets[i]
         local key = full(npc)
         if is_live(npc) and not assault_quarantined_npcs[key] then
-            local hide_ok, hide_err = pcall(function()
-                npc:SetActorHiddenInGame(true)
-            end)
-            local collision_ok, collision_err = pcall(function()
-                npc:SetActorEnableCollision(false)
-            end)
-            local tick_ok, tick_err = pcall(function()
-                npc:SetActorTickEnabled(false)
-            end)
-            local net_ok, net_err = pcall(function() npc:ForceNetUpdate() end)
-            if hide_ok and collision_ok and tick_ok and net_ok then
+            local ai_ok, ai_err = stop_ambient_npc_ai(npc)
+            local hide_ok, hide_err = false, nil
+            local collision_ok, collision_err = false, nil
+            local tick_ok, tick_err = false, nil
+            local net_ok, net_err = false, nil
+            if ai_ok then
+                hide_ok, hide_err = pcall(function()
+                    npc:SetActorHiddenInGame(true)
+                end)
+                collision_ok, collision_err = pcall(function()
+                    npc:SetActorEnableCollision(false)
+                end)
+                tick_ok, tick_err = pcall(function()
+                    npc:SetActorTickEnabled(false)
+                end)
+                net_ok, net_err = pcall(function() npc:ForceNetUpdate() end)
+            end
+            if ai_ok and hide_ok and collision_ok and tick_ok and net_ok then
                 assault_quarantined_npcs[key] = true
                 removed = removed + 1
             else
                 failed = failed + 1
                 first_error = first_error or describe_error(
-                    hide_err or collision_err or tick_err or net_err)
+                    ai_err or hide_err or collision_err or tick_err or net_err)
             end
         end
     end
 
     if removed > 0 then
         assault_ambient_npcs_removed = assault_ambient_npcs_removed + removed
-        append("ambient NPC cleanup: quarantined=" .. removed ..
+        append("ambient NPC cleanup: AI-stopped/quarantined=" .. removed ..
                " total=" .. assault_ambient_npcs_removed ..
                " (Spy agents and player bots untouched)")
     end

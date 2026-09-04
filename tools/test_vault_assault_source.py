@@ -73,5 +73,41 @@ class VaultAssaultSourceTests(unittest.TestCase):
         self.assertIn("teleport_attacker_to_vault_entrance(pawn, slot)",
                       prepare)
 
+    def test_ambient_cleanup_stops_the_real_npc_ai_stack(self):
+        start = self.source.index("local function stop_npc_component")
+        stop = self.source.index("local function reset_vault_assault_state",
+                                 start)
+        cleanup = self.source[start:stop]
+
+        self.assertIn("npc.NPCAI", cleanup)
+        self.assertIn("ai.BehaviorMachine", cleanup)
+        self.assertIn("ai.AdditionalComponents", cleanup)
+        self.assertIn("ai:SetActorTickEnabled(false)", cleanup)
+        self.assertIn("component:SetComponentTickEnabled(false)", cleanup)
+        self.assertIn("component:Deactivate()", cleanup)
+        self.assertIn("ai:IsActorTickEnabled()", cleanup)
+        self.assertIn("component:IsComponentTickEnabled()", cleanup)
+
+    def test_ambient_cleanup_keeps_population_actors_registered(self):
+        start = self.source.index("local function stop_npc_component")
+        stop = self.source.index("local function reset_vault_assault_state",
+                                 start)
+        cleanup = self.source[start:stop]
+
+        self.assertIn('FindAllOf("PopulationManager")', cleanup)
+        self.assertIn("manager.AllNPCs", cleanup)
+        self.assertNotIn(":K2_DestroyActor(", cleanup)
+        self.assertNotIn(":DestroyActor(", cleanup)
+        self.assertNotIn(":UnPossess(", cleanup)
+
+    def test_failed_ai_shutdown_is_not_hidden(self):
+        start = self.source.index("local function remove_ambient_npcs_tick")
+        stop = self.source.index("local function reset_vault_assault_state",
+                                 start)
+        cleanup = self.source[start:stop]
+        ai_gate = cleanup.index("if ai_ok then")
+        hide = cleanup.index("npc:SetActorHiddenInGame(true)")
+        self.assertLess(ai_gate, hide)
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,8 +16,13 @@ player bots. `bFillWithBots=True` asks the stock server to keep empty player
 slots filled during testing. `RemoveAmbientNPCs=1` neutralizes only the map's
 manager-owned `NPCCharacter` actors (civilians, staff, guards, technicians, and
 VIPs); agents and agent bots are separate `Spy` actors and remain in the match.
-The NPC actors stay registered internally but are hidden, non-colliding, and
-non-ticking so the population manager does not continually respawn them.
+The NPC actors stay registered internally so the population manager does not
+continually respawn them. Their separate `NPCAIActor`, behavior machine, combat
+components such as `NPCGuardComponent`, and other additional components are
+stopped and verified before the NPC is hidden and made non-colliding. This
+matters because hiding only the character leaves guard AI alive and able to
+shoot invisible projectiles. If AI shutdown cannot be verified, that NPC stays
+visible and the failure is reported instead of creating an invisible attacker.
 
 The shipping dedicated server exits after its result screen and when the final
 human leaves an active match. This profile sets `persistent_server: true`, so
@@ -39,8 +44,9 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   equipped-gadget charges, and upgrade-chip resources. Player bots retain their
   stock loadouts because bulk grants during bot initialization can trigger a
   status-3 shutdown. Friendly fire is explicitly disabled.
-- Wandering ambient NPC actors are removed as they spawn. The five player-bot
-  agents are retained and continue to occupy the remaining Trio slots.
+- Wandering ambient NPC actors have their AI behavior stacks stopped and are
+  hidden as they spawn. The five player-bot agents are retained and continue to
+  occupy the remaining Trio slots.
 - When `DisableSuspicion=1`, every live agent (human or bot) has the underlying
   stamina drain and NPC suspicion checks disabled, stamina kept full, and any
   suspicious state cleared by the existing once-per-second mode tick. All
