@@ -10,6 +10,10 @@
       "LobbyWaitTime": 15,
       "IntroPhaseTime": 5
     },
+    "Gameplay": {
+      "DisableSuspicion": 1,
+      "DisableCover": 1
+    },
     "Extraction": {
       "Mode": "vault_assault",
       "AutoArm": 1,
@@ -19,8 +23,7 @@
       "DefenderFaction": 0,
       "AttackerFaction": 1,
       "TeleportDefenders": 1,
-      "RemoveAmbientNPCs": 1,
-      "DisableSuspicion": 1
+      "RemoveAmbientNPCs": 1
     }
   },
   "tripwire": {

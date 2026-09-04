@@ -92,7 +92,7 @@ STOCK_MODS = ["CheatManagerEnablerMod", "ActorDumperMod", "ConsoleCommandsMod",
 # by our_mods().
 MOD_INFO = {
     "DIConfig": {
-        "description": "timing and spectator overrides via DIConfig.ini",
+        "description": "timing, gameplay, and spectator overrides via DIConfig.ini",
         "experimental": False,
     },
     "DIExtraction": {

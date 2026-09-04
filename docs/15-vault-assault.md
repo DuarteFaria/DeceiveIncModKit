@@ -63,9 +63,15 @@ timer writes, valid/invalid pickups, and the timeout winner decision.
 
 ## Configuration
 
-The profile writes these values under `[Extraction]` in `DIConfig.ini`:
+The profile writes general rules under `[Gameplay]` and mode-specific rules
+under `[Extraction]` in `DIConfig.ini`:
 
 ```ini
+[Gameplay]
+DisableSuspicion = 1
+DisableCover = 1
+
+[Extraction]
 Mode = vault_assault
 AutoArm = 1
 AutoLoadout = 1
@@ -75,14 +81,15 @@ DefenderFaction = 0
 AttackerFaction = 1
 TeleportDefenders = 1
 RemoveAmbientNPCs = 1
-DisableSuspicion = 1
 ```
 
 Omitting both faction ids makes the mod select the two lowest live faction ids.
 `TeleportDefenders = 0` leaves both teams at their stock spawn points.
 `RemoveAmbientNPCs = 0` restores the stock wandering population.
-`DisableSuspicion = 0` restores the stock suspicion system. The setting is
-also available as **Disable suspicion** in the mod-kit profile editor.
+The two `[Gameplay]` settings are owned by `DIConfig` and apply to every game
+mode, not only vault assault. `DisableCover=1` also suppresses DIExtraction's
+forced-disguise option so the two systems cannot fight each other. Both are
+available under **Gameplay rules** in the profile editor.
 
 ## First live-test checklist
 

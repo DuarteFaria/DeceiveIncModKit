@@ -155,3 +155,15 @@ took effect.
 Lobby wait time, room item spawns, NPC population, gamblebox rates, suspicion
 system. None have an ini key. Lobby wait time is solved via UE4SS — see
 docs/05. Command-line `-CommunityBalanceProfile=<path>` also exists.
+
+The mod kit's `DIConfig.ini` is a separate UE4SS configuration surface. Its
+general gameplay section can disable cover and suspicion for any stock mode:
+
+```ini
+[Gameplay]
+DisableSuspicion = 1
+DisableCover = 1
+```
+
+These are shown under **Gameplay rules** in the profile editor and require the
+core `DIConfig` module. They are not native `TripwireServer.ini` keys.

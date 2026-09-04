@@ -76,6 +76,9 @@ local SECURITY_LEVEL_NAMES = {
 -- Re-applied on deploy while set, so the carrier starts the extraction phase
 -- already wearing it rather than having to ask for it after spawning.
 local desired_disguise = nil
+-- DIConfig owns this broad gameplay rule. DIExtraction only reads it to avoid
+-- fighting that rule by re-applying a forced disguise.
+local cover_disabled_by_config = false
 -- Forward declaration: extraction_tick re-applies the disguise but is defined
 -- above apply_disguise, and without this the name would resolve to a nil global
 -- there instead of to the local below.
@@ -100,10 +103,6 @@ local teleport_defenders = true
 -- Player and player-bot agents are ASpy actors instead, so this switch can
 -- remove the wandering population without touching either team's bot slots.
 local remove_ambient_npcs = false
--- Deterministic per-spy suppression. The reflected stock cheat is a toggle,
--- not a setter, so invoking it without a readable global state could turn the
--- system back on. These replicated flags can be written and verified directly.
-local disable_suspicion = false
 
 -- Vault-assault state contains only plain Lua values. UObject wrappers are
 -- always reacquired because UE4SS wrappers become unsafe across map travel.
@@ -120,8 +119,6 @@ local assault_defender_slots = {}
 local assault_attacker_slots = {}
 local assault_stage_attempts = {}
 local assault_objective_block_attempts = {}
-local assault_suspicion_prepared = {}
-local assault_suspicion_last_error = {}
 local assault_pickup_type_logged = false
 local assault_next_defender_slot = 1
 local assault_next_attacker_slot = 1
@@ -380,176 +377,6 @@ local function find_live_spies()
     return result
 end
 
--- Keep the whole stamina-backed suspicion system disabled without installing a
--- high-frequency native hook. bIsSuspicious is only the system's OUTPUT; the
--- first live test proved that clearing it alone lets the stock stamina tick set
--- it again. Disable the NPC check, zero both drain controls, keep stamina full,
--- and retain the interacter guard that stops bot-suspicion interaction events.
-local function suppress_suspicion_for_spy(pawn)
-    local changed = false
-    local failures = {}
-    local before = {}
-    local read_core = pcall(function()
-        before.npc_check = unwrap(pawn.SusEnableNPCCheck)
-        before.suspicious = unwrap(pawn.bIsSuspicious)
-        before.stamina = unwrap(pawn.StaminaCurrent)
-        before.stamina_max = unwrap(pawn.StaminaMax)
-        before.drain = unwrap(pawn.StaminaDrainRate)
-        before.drain_multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
-    end)
-    if not read_core then
-        failures[#failures + 1] = "core suspicion properties unreadable"
-    else
-        local core_ok, core_err = pcall(function()
-            if before.npc_check ~= false then
-                pawn.SusEnableNPCCheck = false
-                changed = true
-            end
-            if before.suspicious ~= false then
-                pawn.bIsSuspicious = false
-                changed = true
-            end
-            if before.drain ~= 0 then
-                pawn.StaminaDrainRate = 0.0
-                changed = true
-            end
-            if before.drain_multiplier ~= 0 then
-                pawn.StaminaDrainRateMultiplier = 0.0
-                changed = true
-            end
-        end)
-        if not core_ok then
-            failures[#failures + 1] = "core suspicion write: " ..
-                                      describe_error(core_err)
-        end
-
-        if type(before.stamina_max) ~= "number" then
-            failures[#failures + 1] = "StaminaMax unreadable"
-        elseif type(before.stamina) ~= "number" or
-               before.stamina < before.stamina_max then
-            -- Use the game's own setter first so its stamina delegate and
-            -- replication path run. The direct assignment is a safe fallback
-            -- for shipping builds that compile the helper into a no-op.
-            local reset_ok = pcall(function() pawn:ResetStaminaToMax() end)
-            local reset_value
-            pcall(function() reset_value = unwrap(pawn.StaminaCurrent) end)
-            if not reset_ok or type(reset_value) ~= "number" or
-               reset_value < before.stamina_max then
-                local direct_ok, direct_err = pcall(function()
-                    pawn.StaminaCurrent = before.stamina_max
-                end)
-                if not direct_ok then
-                    failures[#failures + 1] = "StaminaCurrent write: " ..
-                                              describe_error(direct_err)
-                end
-            end
-            changed = true
-        end
-    end
-
-    local interacter
-    pcall(function() interacter = unwrap(pawn.InteracterComponent) end)
-    if interacter == nil or not is_live(interacter) then
-        failures[#failures + 1] = "no live InteracterComponent"
-    else
-        local can_trigger
-        local read_trigger = pcall(function()
-            can_trigger = unwrap(interacter.bCanTriggerBotSuspiciousness)
-        end)
-        if not read_trigger then
-            failures[#failures + 1] =
-                "bCanTriggerBotSuspiciousness unreadable"
-        elseif can_trigger ~= false then
-            local ok, err = pcall(function()
-                interacter.bCanTriggerBotSuspiciousness = false
-            end)
-            if ok then
-                changed = true
-            else
-                failures[#failures + 1] =
-                    "bCanTriggerBotSuspiciousness write: " ..
-                    describe_error(err)
-            end
-        end
-    end
-
-    local after = {}
-    local verify_core = pcall(function()
-        after.npc_check = unwrap(pawn.SusEnableNPCCheck)
-        after.suspicious = unwrap(pawn.bIsSuspicious)
-        after.stamina = unwrap(pawn.StaminaCurrent)
-        after.stamina_max = unwrap(pawn.StaminaMax)
-        after.drain = unwrap(pawn.StaminaDrainRate)
-        after.drain_multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
-    end)
-    local verify_trigger = interacter ~= nil and is_live(interacter) and
-        pcall(function()
-            after.can_trigger = unwrap(
-                interacter.bCanTriggerBotSuspiciousness)
-        end)
-    if not verify_core then
-        failures[#failures + 1] = "core suspicion read-back failed"
-    else
-        if after.npc_check ~= false then
-            failures[#failures + 1] =
-                "SusEnableNPCCheck did not read back false"
-        end
-        if after.suspicious ~= false then
-            failures[#failures + 1] = "bIsSuspicious did not read back false"
-        end
-        if after.drain ~= 0 then
-            failures[#failures + 1] =
-                "StaminaDrainRate did not read back zero"
-        end
-        if after.drain_multiplier ~= 0 then
-            failures[#failures + 1] =
-                "StaminaDrainRateMultiplier did not read back zero"
-        end
-        if type(after.stamina) ~= "number" or
-           type(after.stamina_max) ~= "number" or
-           after.stamina < after.stamina_max then
-            failures[#failures + 1] = "stamina did not read back full"
-        end
-    end
-    if not verify_trigger or after.can_trigger ~= false then
-        failures[#failures + 1] =
-            "bCanTriggerBotSuspiciousness did not read back false"
-    end
-    if changed then pcall(function() pawn:ForceNetUpdate() end) end
-    local detail = "npc_check=" .. tostring(after.npc_check) ..
-                   " suspicious=" .. tostring(after.suspicious) ..
-                   " stamina=" .. tostring(after.stamina) .. "/" ..
-                   tostring(after.stamina_max) ..
-                   " drain=" .. tostring(after.drain) ..
-                   " multiplier=" .. tostring(after.drain_multiplier) ..
-                   " interaction_trigger=" .. tostring(after.can_trigger)
-    return #failures == 0, table.concat(failures, "; "), changed, detail
-end
-
-local function suppress_assault_suspicion(spies)
-    if not disable_suspicion then return end
-    for _, pawn in ipairs(spies) do
-        local key = full(player_state_of_spy(pawn))
-        if key == "<nil>" or key == "<unrenderable>" then key = full(pawn) end
-        local ok, why, changed, detail = suppress_suspicion_for_spy(pawn)
-        if ok then
-            assault_suspicion_last_error[key] = nil
-            if not assault_suspicion_prepared[key] then
-                assault_suspicion_prepared[key] = true
-                append("suspicion disabled and verified: " .. spy_name(pawn) ..
-                       " bot=" .. tostring(is_bot_spy(pawn)) .. " " .. detail)
-            elseif changed then
-                append("suspicion controls restored: " .. spy_name(pawn) ..
-                       " " .. detail)
-            end
-        elseif assault_suspicion_last_error[key] ~= why then
-            assault_suspicion_last_error[key] = why
-            append("suspicion suppression pending for " .. spy_name(pawn) ..
-                   ": " .. tostring(why))
-        end
-    end
-end
-
 local function find_live_player_states()
     local found, result = nil, {}
     pcall(function() found = FindAllOf("DIPlayerState") end)
@@ -671,8 +498,6 @@ local function reset_vault_assault_state()
     assault_attacker_slots = {}
     assault_stage_attempts = {}
     assault_objective_block_attempts = {}
-    assault_suspicion_prepared = {}
-    assault_suspicion_last_error = {}
     assault_pickup_type_logged = false
     assault_next_defender_slot = 1
     assault_next_attacker_slot = 1
@@ -1633,7 +1458,6 @@ vault_assault_tick = function()
     if phase == nil or phase < PHASE_BY_NAME.VAULT_LOCKED then return end
 
     local spies = find_live_spies()
-    suppress_assault_suspicion(spies)
     if phase == PHASE_BY_NAME.VAULT_LOCKED then
         if #spies == 0 then
             append("holding at VAULT_LOCKED: no deployed spies yet")
@@ -1824,6 +1648,9 @@ local function swap_disguise_to_tier(pawn, level, name)
 end
 
 apply_disguise = function(controller, level)
+    if cover_disabled_by_config then
+        return false, "disabled by [Gameplay] DisableCover"
+    end
     local name = tostring(player_name_of(controller))
     local pawn
     pcall(function() pawn = unwrap(controller.Pawn) end)
@@ -1931,6 +1758,11 @@ local function consume_disguise()
     if level_text == "off" then
         desired_disguise = nil
         append("disguise auto-apply cleared")
+        return
+    end
+    if cover_disabled_by_config then
+        desired_disguise = nil
+        append("disguise refused: [Gameplay] DisableCover is enabled")
         return
     end
     local level = SECURITY_LEVELS[tostring(level_text):lower()]
@@ -2354,14 +2186,17 @@ local function load_config()
     if fh == nil then return end
     local section = nil
     local settings = {}
+    local gameplay_settings = {}
     for line in fh:lines() do
         local header = line:match("^%s*%[([^%]]+)%]")
         if header then
             section = header
-        elseif section == "Extraction" then
+        elseif section == "Extraction" or section == "Gameplay" then
             local key, value = line:match("^%s*([%w_]+)%s*=%s*([^;\r\n]+)")
             if key then
-                settings[key:lower()] = (value:gsub("%s+$", ""))
+                local target = section == "Extraction" and settings or
+                               gameplay_settings
+                target[key:lower()] = (value:gsub("%s+$", ""))
             end
         end
     end
@@ -2387,6 +2222,11 @@ local function load_config()
     end
     configured_defender_faction = tonumber(settings.defenderfaction)
     configured_attacker_faction = tonumber(settings.attackerfaction)
+    if gameplay_settings.disablecover ~= nil then
+        local value = gameplay_settings.disablecover:lower()
+        cover_disabled_by_config =
+            value == "1" or value == "true" or value == "yes"
+    end
     if settings.teleportdefenders ~= nil then
         local value = settings.teleportdefenders:lower()
         teleport_defenders = value == "1" or value == "true" or value == "yes"
@@ -2394,10 +2234,6 @@ local function load_config()
     if settings.removeambientnpcs ~= nil then
         local value = settings.removeambientnpcs:lower()
         remove_ambient_npcs = value == "1" or value == "true" or value == "yes"
-    end
-    if settings.disablesuspicion ~= nil then
-        local value = settings.disablesuspicion:lower()
-        disable_suspicion = value == "1" or value == "true" or value == "yes"
     end
 
     if settings.autoarm == "1" or (settings.autoarm or ""):lower() == "true" then
@@ -2418,7 +2254,10 @@ local function load_config()
         carrier_filter = settings.carrier
         append("carrier filter from config: " .. carrier_filter)
     end
-    if settings.disguise and settings.disguise ~= "" then
+    if cover_disabled_by_config then
+        desired_disguise = nil
+        append("forced disguise disabled by [Gameplay] DisableCover")
+    elseif settings.disguise and settings.disguise ~= "" then
         local level = SECURITY_LEVELS[settings.disguise:lower()] or
                       tonumber(settings.disguise)
         if level and level >= 0 and level <= 4 then
@@ -2435,8 +2274,7 @@ local function load_config()
                " defender_faction=" .. tostring(configured_defender_faction) ..
                " attacker_faction=" .. tostring(configured_attacker_faction) ..
                " teleport_defenders=" .. tostring(teleport_defenders) ..
-               " remove_ambient_npcs=" .. tostring(remove_ambient_npcs) ..
-               " disable_suspicion=" .. tostring(disable_suspicion))
+               " remove_ambient_npcs=" .. tostring(remove_ambient_npcs))
     end
 end
 
