@@ -33,9 +33,10 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   game's proven timer-expiry path, and begins at `VAULT_UNLOCKED`.
 - Defenders are teleported to collision-checked positions around the objective;
   attackers keep their ordinary map spawns.
-- Every deployed spy, including player bots, gets full legal health, ammo,
-  intel, all four keycards, equipped-gadget charges, and upgrade-chip resources.
-  Friendly fire is explicitly disabled.
+- Every human spy gets full legal health, ammo, intel, all four keycards,
+  equipped-gadget charges, and upgrade-chip resources. Player bots retain their
+  stock loadouts because bulk grants during bot initialization can trigger a
+  status-3 shutdown. Friendly fire is explicitly disabled.
 - Wandering ambient NPC actors are removed as they spawn. The five player-bot
   agents are retained and continue to occupy the remaining Trio slots.
 - Attackers have 120 seconds to pick up the briefcase. Their first valid pickup

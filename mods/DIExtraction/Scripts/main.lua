@@ -312,6 +312,31 @@ local function player_state_of_spy(pawn)
     return state
 end
 
+-- Bot pawns use the same ASpy type as human players, so never infer control
+-- from the actor class or display name. These two stock flags agreed with the
+-- live dedicated-server roster in every observed match.
+local function is_bot_spy(pawn)
+    local bot = false
+    pcall(function()
+        if pawn.bIsBot == true then bot = true end
+    end)
+    local state = player_state_of_spy(pawn)
+    pcall(function()
+        if state and state.bIsABot == true then bot = true end
+    end)
+    return bot
+end
+
+local function human_controller_of_spy(pawn)
+    if is_bot_spy(pawn) then return nil end
+    local controller
+    pcall(function() controller = unwrap(pawn.Controller) end)
+    if controller and is_live(controller) and is_human(controller) then
+        return controller
+    end
+    return nil
+end
+
 local function faction_of_spy(pawn)
     local faction = number_property(player_state_of_spy(pawn), "FactionID")
     if faction == nil then
@@ -1127,9 +1152,27 @@ local function prepare_assault_spies(spies, pickup_source)
                     loadout_ok = true
                     assault_loadout_prepared[key] = true
                 elseif not loadout_ok then
-                    loadout_ok, loadout_why = grant_full_resources_to_pawn(
-                        pawn, spy_name(pawn))
-                    if loadout_ok then assault_loadout_prepared[key] = true end
+                    if is_bot_spy(pawn) then
+                        -- Calling AddResource across every resource enum while
+                        -- bot equipment is initializing reproducibly drives the
+                        -- dedicated server into a status-3 shutdown. Bots keep
+                        -- the loadout selected by the stock game.
+                        loadout_ok = true
+                        assault_loadout_prepared[key] = true
+                        append("automatic loadout skipped for agent bot " ..
+                               spy_name(pawn))
+                    elseif human_controller_of_spy(pawn) == nil then
+                        -- A human pawn may precede its controller/NetConnection
+                        -- by a tick. Leave it pending instead of treating it as
+                        -- a bot and permanently missing the grant.
+                        loadout_why = "waiting for human controller"
+                    else
+                        loadout_ok, loadout_why = grant_full_resources_to_pawn(
+                            pawn, spy_name(pawn))
+                        if loadout_ok then
+                            assault_loadout_prepared[key] = true
+                        end
+                    end
                 end
 
                 local health
@@ -1264,10 +1307,10 @@ end
 
 -- Asymmetric prototype. Trio supplies the native 3-person factions and bots;
 -- this layer assigns the first faction as defenders and the second as
--- attackers, opens the vault, stages defenders, grants every spy a full legal
--- resource loadout, and changes the stock replicated clock from 120 seconds to
--- 60 seconds on the first valid attacker pickup. Extraction and its result stay
--- entirely stock.
+-- attackers, opens the vault, stages defenders, grants each human spy a full
+-- legal resource loadout, and changes the stock replicated clock from 120
+-- seconds to 60 seconds on the first valid attacker pickup. Agent bots retain
+-- their stock loadouts. Extraction and its result stay entirely stock.
 vault_assault_tick = function()
     if not armed then return end
     remove_ambient_npcs_tick()
