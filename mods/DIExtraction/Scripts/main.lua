@@ -131,6 +131,8 @@ local assault_ambient_npcs_removed = 0
 local assault_guard_weapons_neutralized = 0
 local assault_last_npc_cleanup_log = 0
 local assault_npc_cleanup_cursor = 1
+local assault_npc_combat_disabled = false
+local assault_npc_combat_error = nil
 local assault_npc_cleanup_error = nil
 local assault_quarantined_npcs = {}
 local AMBIENT_NPC_CLEANUP_BATCH = 2
@@ -437,6 +439,8 @@ local function neutralize_npc_guard_component(component)
         component.bInvestigatingDanger = false
         component.bLookingAtAggroTarget = false
         component.ReplicatedAggroTargetActor = nil
+        component.CurrentInvestigationType = 0 -- None
+        component.CurrentInvestigationState = 5 -- GiveUp
         component.EncounterShootRange = 0.0
         component.EncounterMeleeRange = 0.0
         component.EncounterMeleeDamage = 0.0
@@ -495,6 +499,149 @@ local function neutralize_ambient_npc_weapons(npc)
         if found then weapons = weapons + 1 end
     end
     return true, weapons, nil
+end
+
+-- EncounterManager is the authority that gives ambient guards permission to
+-- attack. Disable combat there as soon as the map creates it, before the slower
+-- actor quarantine reaches every NPC. This also covers late phase-driven NPC
+-- waves. Agent bots are ASpy pawns and do not use this NPC encounter system.
+local function disable_ambient_npc_combat()
+    if assault_npc_combat_disabled then return end
+
+    local managers = {}
+    local manager_seen = {}
+    local game_state = find_live_game_state()
+    if game_state ~= nil then
+        local manager
+        pcall(function() manager = unwrap(game_state.EncounterManager) end)
+        if manager ~= nil and is_live(manager) then
+            managers[#managers + 1] = manager
+            manager_seen[full(manager)] = true
+        end
+    end
+
+    local discovered_managers
+    local manager_find_ok, manager_find_err = pcall(function()
+        discovered_managers = FindAllOf("EncounterManager")
+    end)
+    if discovered_managers ~= nil then
+        for i = 1, #discovered_managers do
+            local manager = discovered_managers[i]
+            local key = full(manager)
+            if is_live(manager) and not manager_seen[key] then
+                managers[#managers + 1] = manager
+                manager_seen[key] = true
+            end
+        end
+    end
+
+    -- The data asset is normally loaded before EncounterManager is assigned to
+    -- the match game state. Mutating it directly closes the attack gate during
+    -- pregame, before a late NPC wave can acquire a player.
+    local datas = {}
+    local data_seen = {}
+    local discovered_datas
+    local data_find_ok, data_find_err = pcall(function()
+        discovered_datas = FindAllOf("EncounterDataAsset")
+    end)
+    if discovered_datas ~= nil then
+        for i = 1, #discovered_datas do
+            local data = discovered_datas[i]
+            local key = full(data)
+            if is_live(data) and not data_seen[key] then
+                datas[#datas + 1] = data
+                data_seen[key] = true
+            end
+        end
+    end
+
+    local first_error = nil
+    if not manager_find_ok then
+        first_error = describe_error(manager_find_err)
+    end
+    if not data_find_ok then
+        first_error = first_error or describe_error(data_find_err)
+    end
+    for i = 1, #managers do
+        local data
+        local read_ok, read_err = pcall(function()
+            data = unwrap(managers[i].EncounterData)
+        end)
+        if not read_ok then
+            first_error = first_error or describe_error(read_err)
+        elseif data ~= nil and is_live(data) then
+            local key = full(data)
+            if not data_seen[key] then
+                datas[#datas + 1] = data
+                data_seen[key] = true
+            end
+        end
+    end
+
+    if #datas == 0 then
+        if first_error ~= nil and first_error ~= assault_npc_combat_error then
+            assault_npc_combat_error = first_error
+            append("ambient NPC combat lookup failed: " .. first_error)
+        end
+        return
+    end
+
+    local found = 0
+    local verified = 0
+    local changed = 0
+    for i = 1, #datas do
+        local data = datas[i]
+        found = found + 1
+        local write_ok, write_err = pcall(function()
+            if unwrap(data.bAllowShooting) ~= false then
+                data.bAllowShooting = false
+                changed = changed + 1
+            end
+            if unwrap(data.bAllowMelee) ~= false then
+                data.bAllowMelee = false
+                changed = changed + 1
+            end
+        end)
+        if not write_ok then
+            first_error = first_error or describe_error(write_err)
+        else
+            -- Some encounter decisions read the per-heat-level copy directly,
+            -- so close both gates where reflected struct writes are supported.
+            pcall(function()
+                local heat = data.HeatLevelData
+                if heat ~= nil then
+                    for j = 1, #heat do
+                        heat[j].bAllowShooting = false
+                        heat[j].bAllowMelee = false
+                    end
+                end
+            end)
+            local shooting, melee
+            local verify_ok, verify_err = pcall(function()
+                shooting = unwrap(data.bAllowShooting)
+                melee = unwrap(data.bAllowMelee)
+            end)
+            if not verify_ok then
+                first_error = first_error or describe_error(verify_err)
+            elseif shooting == false and melee == false then
+                verified = verified + 1
+            else
+                first_error = first_error or
+                    "encounter combat flags remained enabled"
+            end
+        end
+    end
+
+    assault_npc_combat_disabled = found > 0 and verified == found
+
+    if assault_npc_combat_disabled then
+        assault_npc_combat_error = nil
+        append("ambient NPC combat disabled at encounter authority; sources=" ..
+               found .. " changed=" .. changed)
+    elseif first_error ~= nil and first_error ~= assault_npc_combat_error then
+        assault_npc_combat_error = first_error
+        append("ambient NPC combat disable pending: " .. first_error)
+    end
 end
 
 -- Stop the ambient population at its source. SpawnCount is copied from the
@@ -755,6 +902,8 @@ local function reset_vault_assault_state()
     assault_guard_weapons_neutralized = 0
     assault_last_npc_cleanup_log = 0
     assault_npc_cleanup_cursor = 1
+    assault_npc_combat_disabled = false
+    assault_npc_combat_error = nil
     assault_npc_cleanup_error = nil
     assault_quarantined_npcs = {}
 end
@@ -2555,6 +2704,7 @@ end
 -- so player staging, loadout, timers, and objective state stay responsive.
 LoopAsync(100, function()
     if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
+        pcall(disable_ambient_npc_combat)
         pcall(remove_ambient_npcs_tick)
     end
     return false

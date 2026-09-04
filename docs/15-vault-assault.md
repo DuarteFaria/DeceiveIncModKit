@@ -45,6 +45,8 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   stock loadouts because bulk grants during bot initialization can trigger a
   status-3 shutdown. Friendly fire is explicitly disabled.
 - Ambient spawn-data and live manager counts are forced to zero during map load.
+  NPC shooting and melee are also disabled immediately at the encounter
+  authority, including for phase-driven NPC waves that appear after map load.
   Any NPCs that win that startup race have their AI stopped and are hidden; guard
   hitscan and melee damage is also zeroed so a queued shot cannot come from an
   invisible actor. Cleanup is processed in small background batches so it cannot

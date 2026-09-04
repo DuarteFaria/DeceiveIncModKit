@@ -144,6 +144,21 @@ class VaultAssaultSourceTests(unittest.TestCase):
         config = self.source.index("pcall(load_config)")
         self.assertIn("LoopAsync(100, function()", self.source[config:])
 
+    def test_npc_combat_is_disabled_before_batched_cleanup(self):
+        self.assertIn('FindAllOf("EncounterManager")', self.source)
+        self.assertIn('FindAllOf("EncounterDataAsset")', self.source)
+        self.assertIn("game_state.EncounterManager", self.source)
+        self.assertIn("data.bAllowShooting = false", self.source)
+        self.assertIn("data.bAllowMelee = false", self.source)
+        self.assertIn("heat[j].bAllowShooting = false", self.source)
+        self.assertIn("heat[j].bAllowMelee = false", self.source)
+        self.assertIn("component.CurrentInvestigationType = 0", self.source)
+        self.assertIn("component.CurrentInvestigationState = 5", self.source)
+        loop = self.source.index("LoopAsync(100, function()")
+        disable = self.source.index("pcall(disable_ambient_npc_combat)", loop)
+        cleanup = self.source.index("pcall(remove_ambient_npcs_tick)", loop)
+        self.assertLess(disable, cleanup)
+
     def test_players_are_prepared_before_vault_phase_advance(self):
         start = self.source.index("vault_assault_tick = function()")
         stop = self.source.index("if phase >= PHASE_BY_NAME.RESULT_SCREEN", start)
