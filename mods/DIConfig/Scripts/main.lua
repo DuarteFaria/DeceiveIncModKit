@@ -4,6 +4,13 @@
 -- [Timing]
 -- LobbyWaitTime   = 30    ; pregame lobby countdown, seconds (default 90)
 -- IntroPhaseTime  = 10    ; spy intro/posing phase, seconds (default 19)
+--
+-- [Gameplay]
+-- DisableSuspicion = 0    ; applies to every game mode
+-- DisableCover     = 0    ; keeps agents permanently out of cover
+-- DisableHeat      = 0    ; prevents heat gain and clears existing heat
+-- DisableCoverRegeneration = 0 ; cover can be lost but will not recharge
+-- RemoveAmbientNPCs = 0   ; all modes; implemented by DIExtraction
 
 local INI = "DIConfig.ini"
 local cfg = {}
@@ -21,6 +28,12 @@ local function load_ini()
             out:write("LobbyWaitTime = 30\n")
             out:write("; spy intro / posing phase in seconds (packaged default: 19)\n")
             out:write("IntroPhaseTime = 19\n")
+            out:write("\n[Gameplay]\n")
+            out:write("DisableSuspicion = 0\n")
+            out:write("DisableCover = 0\n")
+            out:write("DisableHeat = 0\n")
+            out:write("DisableCoverRegeneration = 0\n")
+            out:write("RemoveAmbientNPCs = 0\n")
             out:close()
         end
         fh = io.open(INI, "r")
@@ -34,6 +47,493 @@ local function load_ini()
         end
     end
     fh:close()
+end
+
+local function enabled(value)
+    if type(value) == "number" then return value ~= 0 end
+    local text = tostring(value or ""):lower()
+    return text == "1" or text == "true" or text == "yes" or text == "on"
+end
+
+local function unwrap(value)
+    if value == nil then return nil end
+    local kind
+    pcall(function() kind = value:type() end)
+    if kind == "LocalUnrealParam" or kind == "RemoteUnrealParam" then
+        local inner
+        pcall(function() inner = value:get() end)
+        return inner
+    end
+    return value
+end
+
+local function full(object)
+    if object == nil then return "<nil>" end
+    local rendered
+    if pcall(function() rendered = object:GetFullName() end) and rendered then
+        return tostring(rendered)
+    end
+    return "<unrenderable>"
+end
+
+local function live_spies()
+    local found, result = nil, {}
+    pcall(function() found = FindAllOf("Spy") end)
+    if not found then return result end
+    for i = 1, #found do
+        local object = found[i]
+        local name = full(object)
+        if name ~= "<nil>" and name ~= "<unrenderable>" and
+           not name:find("Default__", 1, true) and
+           not name:find(".PersistentLevel.None", 1, true) then
+            result[#result + 1] = object
+        end
+    end
+    return result
+end
+
+local function active_match()
+    local phase_names = {
+        VAULT_LOCKED = 3, VAULT_UNLOCKED = 4, EXTRACTION_CALLED = 5,
+        EXTRACTION_ARRIVED = 6,
+    }
+    local states
+    pcall(function() states = FindAllOf("DeceiveIncMatchGameState") end)
+    if not states then return false end
+    for i = 1, #states do
+        local state = states[i]
+        if not full(state):find("Default__", 1, true) then
+            local phase, raw
+            pcall(function() raw = unwrap(state.GamePhase) end)
+            if type(raw) == "number" then
+                phase = raw
+            else
+                pcall(function() phase = tonumber(raw) end)
+                if phase == nil then
+                    local rendered
+                    pcall(function() rendered = tostring(raw:ToString()) end)
+                    if rendered == nil then
+                        pcall(function() rendered = tostring(raw) end)
+                    end
+                    if type(rendered) == "string" then
+                        phase = phase_names[rendered:gsub("^ESpyGamePhase::", "")]
+                    end
+                end
+            end
+            -- VAULT_LOCKED through EXTRACTION_ARRIVED. These phases are shared
+            -- by the stock Solo, Duo, and Trio flows.
+            if phase and phase >= 3 and phase <= 6 then return true, state end
+        end
+    end
+    return false, nil
+end
+
+local disable_suspicion = false
+local disable_cover = false
+local disable_heat = false
+local disable_cover_regeneration = false
+local gameplay_ready = {}
+local gameplay_last_error = {}
+local gameplay_last_combat_cleanup = {}
+local GAMEPLAY_BLOCK_SECONDS = 3600000.0
+
+local function suppress_heat(pawn)
+    local before = {}
+    local read_ok = pcall(function()
+        before.level = unwrap(pawn.HeatState.HeatLevel)
+        before.count = unwrap(pawn.HeatState.HeatCount)
+        before.scold = unwrap(pawn.HeatSetup.ScoldHeatPerSeccond)
+        before.spy_hit = unwrap(pawn.HeatSetup.HeatDelayForSpyHit)
+        before.passive = unwrap(pawn.HeatSetup.HeatDelayPassiveGain)
+        before.post_cover = unwrap(pawn.HeatSetup.HeatDelayAggroPostCover)
+    end)
+    if not read_ok or type(before.level) ~= "number" or
+       type(before.count) ~= "number" then
+        return false, "heat properties unavailable", false, ""
+    end
+
+    local changed = before.level ~= 0 or before.count ~= 0 or
+                    before.scold ~= 0 or
+                    before.spy_hit ~= GAMEPLAY_BLOCK_SECONDS or
+                    before.passive ~= GAMEPLAY_BLOCK_SECONDS or
+                    before.post_cover ~= GAMEPLAY_BLOCK_SECONDS
+
+    -- Let the native decrement path remove any active heat penalties first;
+    -- direct replicated writes then close the race with another heat source.
+    if before.count > 0 then
+        pcall(function() pawn:DecrementHeat(before.count) end)
+    end
+
+    local write_ok, write_error = pcall(function()
+        pawn.HeatState.HeatLevel = 0
+        pawn.HeatState.HeatCount = 0
+        pawn.HeatSetup.ScoldHeatPerSeccond = 0.0
+        pawn.HeatSetup.HeatDelayForSpyHit = GAMEPLAY_BLOCK_SECONDS
+        pawn.HeatSetup.HeatDelayPassiveGain = GAMEPLAY_BLOCK_SECONDS
+        pawn.HeatSetup.HeatDelayAggroPostCover = GAMEPLAY_BLOCK_SECONDS
+
+        local npc_damage = pawn.HeatSetup.NPCDamageHeatPerPool
+        if npc_damage ~= nil then
+            for i = 1, #npc_damage do
+                if unwrap(npc_damage[i]) ~= 0 then changed = true end
+                npc_damage[i] = 0
+            end
+        end
+    end)
+    if not write_ok then
+        return false, "heat write failed: " .. tostring(write_error),
+               changed, ""
+    end
+
+    local after = {}
+    local sources_zero = true
+    local verify_ok = pcall(function()
+        after.level = unwrap(pawn.HeatState.HeatLevel)
+        after.count = unwrap(pawn.HeatState.HeatCount)
+        after.scold = unwrap(pawn.HeatSetup.ScoldHeatPerSeccond)
+        after.spy_hit = unwrap(pawn.HeatSetup.HeatDelayForSpyHit)
+        after.passive = unwrap(pawn.HeatSetup.HeatDelayPassiveGain)
+        after.post_cover = unwrap(pawn.HeatSetup.HeatDelayAggroPostCover)
+        local npc_damage = pawn.HeatSetup.NPCDamageHeatPerPool
+        if npc_damage ~= nil then
+            for i = 1, #npc_damage do
+                if unwrap(npc_damage[i]) ~= 0 then sources_zero = false end
+            end
+        end
+    end)
+    local verified = verify_ok and after.level == 0 and after.count == 0 and
+        after.scold == 0 and after.spy_hit == GAMEPLAY_BLOCK_SECONDS and
+        after.passive == GAMEPLAY_BLOCK_SECONDS and
+        after.post_cover == GAMEPLAY_BLOCK_SECONDS and sources_zero
+    local detail = string.format(
+        "heat[level=%s count=%s npc_sources_zero=%s]",
+        tostring(after.level), tostring(after.count), tostring(sources_zero))
+    return verified, verified and nil or "heat read-back failed", changed,
+           detail
+end
+
+local function suppress_cover_regeneration(pawn)
+    local fields = {
+        "TimeBeforeStartingRecover",
+        "TimeToRecoverIdling", "TimeToRecoverWalking", "TimeToRecoverRunning",
+        "TimeToRecoverInCoverIdling", "TimeToRecoverInCoverWalking",
+        "TimeToRecoverInCoverRunning",
+    }
+    local before = {}
+    local read_ok = pcall(function()
+        for _, field in ipairs(fields) do before[field] = unwrap(pawn[field]) end
+    end)
+    if not read_ok then
+        return false, "cover regeneration properties unavailable", false, ""
+    end
+
+    local changed = false
+    for _, field in ipairs(fields) do
+        if type(before[field]) ~= "number" then
+            return false, "cover regeneration field unavailable: " .. field,
+                   changed, ""
+        end
+        if before[field] ~= GAMEPLAY_BLOCK_SECONDS then changed = true end
+    end
+
+    if changed then
+        local write_ok, write_error = pcall(function()
+            for _, field in ipairs(fields) do
+                pawn[field] = GAMEPLAY_BLOCK_SECONDS
+            end
+        end)
+        if not write_ok then
+            return false,
+                   "cover regeneration write failed: " .. tostring(write_error),
+                   changed, ""
+        end
+    end
+
+    local verified = true
+    local verify_ok = pcall(function()
+        for _, field in ipairs(fields) do
+            if unwrap(pawn[field]) ~= GAMEPLAY_BLOCK_SECONDS then
+                verified = false
+            end
+        end
+    end)
+    verified = verify_ok and verified
+    local detail = "cover_regeneration[blocked=" .. tostring(verified) .. "]"
+    return verified,
+           verified and nil or "cover regeneration read-back failed",
+           changed, detail
+end
+
+local function suppress_suspicion(pawn)
+    local changed = false
+    local before = {}
+    local read_ok = pcall(function()
+        before.npc_check = unwrap(pawn.SusEnableNPCCheck)
+        before.suspicious = unwrap(pawn.bIsSuspicious)
+        before.stamina = unwrap(pawn.StaminaCurrent)
+        before.stamina_max = unwrap(pawn.StaminaMax)
+        before.drain = unwrap(pawn.StaminaDrainRate)
+        before.multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
+        before.no_out_of_cover_tick = unwrap(pawn.bNoStamTickOutOfCover)
+        before.only_undercover = unwrap(pawn.bSusOnlyDrainUndercover)
+    end)
+    if not read_ok or type(before.stamina_max) ~= "number" then
+        return false, "suspicion properties unavailable", changed, ""
+    end
+
+    local write_ok, write_error = pcall(function()
+        if before.npc_check ~= false then
+            pawn.SusEnableNPCCheck = false
+            changed = true
+        end
+        if before.suspicious ~= false then
+            pawn.bIsSuspicious = false
+            changed = true
+        end
+        if before.drain ~= 0 then
+            pawn.StaminaDrainRate = 0.0
+            changed = true
+        end
+        if before.multiplier ~= 0 then
+            pawn.StaminaDrainRateMultiplier = 0.0
+            changed = true
+        end
+        if before.no_out_of_cover_tick ~= true then
+            pawn.bNoStamTickOutOfCover = true
+            changed = true
+        end
+        if before.only_undercover ~= true then
+            pawn.bSusOnlyDrainUndercover = true
+            changed = true
+        end
+    end)
+    if not write_ok then
+        return false, "suspicion write failed: " .. tostring(write_error),
+               changed, ""
+    end
+
+    if type(before.stamina) ~= "number" or
+       before.stamina < before.stamina_max then
+        pcall(function() pawn:ResetStaminaToMax() end)
+        local reset_value
+        pcall(function() reset_value = unwrap(pawn.StaminaCurrent) end)
+        if type(reset_value) ~= "number" or
+           reset_value < before.stamina_max then
+            pcall(function() pawn.StaminaCurrent = before.stamina_max end)
+        end
+        changed = true
+    end
+
+    local interacter
+    pcall(function() interacter = unwrap(pawn.InteracterComponent) end)
+    if interacter ~= nil then
+        local can_trigger
+        pcall(function()
+            can_trigger = unwrap(interacter.bCanTriggerBotSuspiciousness)
+        end)
+        if can_trigger ~= false then
+            pcall(function()
+                interacter.bCanTriggerBotSuspiciousness = false
+            end)
+            changed = true
+        end
+    end
+
+    local after = {}
+    local verify_ok = pcall(function()
+        after.npc_check = unwrap(pawn.SusEnableNPCCheck)
+        after.suspicious = unwrap(pawn.bIsSuspicious)
+        after.stamina = unwrap(pawn.StaminaCurrent)
+        after.stamina_max = unwrap(pawn.StaminaMax)
+        after.drain = unwrap(pawn.StaminaDrainRate)
+        after.multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
+        after.no_out_of_cover_tick = unwrap(pawn.bNoStamTickOutOfCover)
+        after.only_undercover = unwrap(pawn.bSusOnlyDrainUndercover)
+        if interacter then
+            after.can_trigger =
+                unwrap(interacter.bCanTriggerBotSuspiciousness)
+        end
+    end)
+    local verified = verify_ok and after.npc_check == false and
+        after.suspicious == false and after.drain == 0 and
+        after.multiplier == 0 and after.no_out_of_cover_tick == true and
+        after.only_undercover == true and after.can_trigger == false and
+        type(after.stamina) == "number" and
+        type(after.stamina_max) == "number" and
+        after.stamina >= after.stamina_max
+    local detail = string.format(
+        "suspicion[npc=%s state=%s stamina=%s/%s drain=%s multiplier=%s]",
+        tostring(after.npc_check), tostring(after.suspicious),
+        tostring(after.stamina), tostring(after.stamina_max),
+        tostring(after.drain), tostring(after.multiplier))
+    return verified, verified and nil or "suspicion read-back failed", changed,
+           detail
+end
+
+local function remove_combat_spawn_protection(pawn, game_state)
+    local health
+    pcall(function() health = unwrap(pawn.HealthComponent) end)
+    if health == nil then return false, "health component unavailable" end
+
+    local changed = false
+    local key = full(pawn)
+    local now = os.time()
+    local run_modifier_cleanup = gameplay_last_combat_cleanup[key] ~= now
+    local ok, err = pcall(function()
+        if unwrap(health.bIgnoreDamage) == true then
+            health.bIgnoreDamage = false
+            changed = true
+        end
+
+        -- The stock intro phase owns this exact modifier. If phase advancement
+        -- or bot possession leaves it attached, a deployed agent can appear
+        -- unhittable for several seconds.
+        if run_modifier_cleanup then
+            local match_modifier
+            if game_state ~= nil then
+                match_modifier = unwrap(game_state.InvulnerabilityInstance)
+            end
+            if match_modifier ~= nil then
+                health:RemoveDamageModifier(match_modifier)
+            end
+
+            -- DisableCover means disguise shielding is not part of this
+            -- ruleset. Remove only the two modifiers owned by the pawn's
+            -- disguise component; agent ability and chip modifiers remain.
+            local shield = unwrap(pawn.DisguiseShieldComponent)
+            if shield ~= nil then
+                shield.DamageReductionDuration = 0.0
+                local disguised =
+                    unwrap(shield.ShieldDisguiseDamageModifierInstance)
+                local exposed = unwrap(shield.ShieldDamageModifierInstance)
+                if disguised ~= nil then
+                    health:RemoveDamageModifier(disguised)
+                end
+                if exposed ~= nil then
+                    health:RemoveDamageModifier(exposed)
+                end
+            end
+            gameplay_last_combat_cleanup[key] = now
+        end
+    end)
+    if not ok then
+        return false, "damage protection cleanup failed: " .. tostring(err)
+    end
+
+    local ignored
+    local verified = pcall(function() ignored = unwrap(health.bIgnoreDamage) end)
+    if not verified or ignored ~= false then
+        return false, "damage protection read-back failed"
+    end
+    return true, nil, changed
+end
+
+local function suppress_cover(pawn, game_state)
+    local before = {}
+    local read_ok = pcall(function()
+        before.disabled = unwrap(pawn.bCheatDisableCover)
+        before.ratio = unwrap(pawn.CoverRatio)
+        before.undercover = unwrap(
+            pawn.UndercoverReplicationData.bShouldBeUndercover)
+        before.undercover_flags = unwrap(pawn.UndercoverReplicationData.Flags)
+    end)
+    if not read_ok then return false, "cover properties unavailable", false, "" end
+
+    local changed = before.disabled ~= true or before.ratio ~= 0 or
+                    before.undercover ~= false or before.undercover_flags ~= 0
+    if changed then
+        -- Do not call AllowCover(false) here. On the dedicated server that
+        -- native transition calls BlowCover and immediately requests process
+        -- exit when deployment begins. IsUndercover() is avoided for the same
+        -- reason: scalar reflected fields are the crash-safe server surface.
+        local write_ok, write_error = pcall(function()
+            pawn.bCheatDisableCover = true
+            pawn.CoverRatio = 0.0
+            pawn.UndercoverReplicationData.bShouldBeUndercover = false
+            pawn.UndercoverReplicationData.Flags = 0
+        end)
+        if not write_ok then
+            return false, "cover write failed: " .. tostring(write_error),
+                   changed, ""
+        end
+    end
+
+    local after = {}
+    local verify_ok = pcall(function()
+        after.disabled = unwrap(pawn.bCheatDisableCover)
+        after.ratio = unwrap(pawn.CoverRatio)
+        after.undercover = unwrap(
+            pawn.UndercoverReplicationData.bShouldBeUndercover)
+        after.undercover_flags = unwrap(pawn.UndercoverReplicationData.Flags)
+    end)
+    local verified = verify_ok and after.disabled == true and
+                     after.ratio == 0 and after.undercover == false and
+                     after.undercover_flags == 0
+    local detail = string.format(
+        "cover[disabled=%s ratio=%s undercover=%s flags=%s]",
+        tostring(after.disabled), tostring(after.ratio),
+        tostring(after.undercover), tostring(after.undercover_flags))
+    if verified then
+        local vulnerable, vulnerability_error, vulnerability_changed =
+            remove_combat_spawn_protection(pawn, game_state)
+        changed = changed or vulnerability_changed
+        if not vulnerable then
+            return false, vulnerability_error, changed, detail
+        end
+    end
+    return verified, verified and nil or "cover read-back failed", changed,
+           detail
+end
+
+local function apply_gameplay()
+    if not disable_suspicion and not disable_cover and not disable_heat and
+       not disable_cover_regeneration then return end
+    local is_active, game_state = active_match()
+    if not is_active then return end
+    for _, pawn in ipairs(live_spies()) do
+        local key = full(pawn)
+        local ok, changed, reasons, details = true, false, {}, {}
+        if disable_heat then
+            local worked, why, altered, detail = suppress_heat(pawn)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
+        if disable_cover_regeneration then
+            local worked, why, altered, detail =
+                suppress_cover_regeneration(pawn)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
+        if disable_suspicion then
+            local worked, why, altered, detail = suppress_suspicion(pawn)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
+        if disable_cover then
+            local worked, why, altered, detail = suppress_cover(pawn, game_state)
+            ok, changed = ok and worked, changed or altered
+            if why then reasons[#reasons + 1] = why end
+            details[#details + 1] = detail
+        end
+        if changed then pcall(function() pawn:ForceNetUpdate() end) end
+        if ok then
+            gameplay_last_error[key] = nil
+            if not gameplay_ready[key] then
+                gameplay_ready[key] = true
+                log("gameplay overrides verified: " .. key .. " " ..
+                    table.concat(details, " "))
+            end
+        else
+            local reason = table.concat(reasons, "; ")
+            if gameplay_last_error[key] ~= reason then
+                gameplay_last_error[key] = reason
+                log("gameplay overrides pending: " .. key .. " " .. reason)
+            end
+        end
+    end
 end
 
 -- set a field inside a struct-valued property and verify it stuck
@@ -127,9 +627,18 @@ local function apply(verbose)
 end
 
 load_ini()
+disable_suspicion = enabled(cfg.DisableSuspicion)
+disable_cover = enabled(cfg.DisableCover)
+disable_heat = enabled(cfg.DisableHeat)
+disable_cover_regeneration = enabled(cfg.DisableCoverRegeneration)
 log("config: LobbyWaitTime=" .. tostring(cfg.LobbyWaitTime) ..
     " IntroPhaseTime=" .. tostring(cfg.IntroPhaseTime) ..
-    " MaxSpectators=" .. tostring(cfg.MaxSpectators))
+    " MaxSpectators=" .. tostring(cfg.MaxSpectators) ..
+    " DisableSuspicion=" .. tostring(disable_suspicion) ..
+    " DisableCover=" .. tostring(disable_cover) ..
+    " DisableHeat=" .. tostring(disable_heat) ..
+    " DisableCoverRegeneration=" .. tostring(disable_cover_regeneration) ..
+    " RemoveAmbientNPCs=" .. tostring(cfg.RemoveAmbientNPCs))
 
 -- TIMING MATTERS. The game copies DefaultPhaseDuration out of the data asset
 -- when the pregame phase begins (ADeceiveIncMatchGameState::
@@ -148,6 +657,14 @@ end)
 
 LoopAsync(30000, function()        -- then keep it applied across map changes
     pcall(apply, false)
+    return false
+end)
+
+-- Pawn controls are dynamic and the stock cover tick can restore them between
+-- frames. A 10 Hz authority loop keeps the replicated HUD/gameplay state steady;
+-- the heavier damage-modifier removal is independently capped at 1 Hz.
+LoopAsync(100, function()
+    pcall(apply_gameplay)
     return false
 end)
 

@@ -109,6 +109,7 @@ python dimod.py apply vanilla             # back to stock gameplay
 | Profile | What it does |
 |---|---|
 | `extraction` | The carrier-extraction game mode. See [docs/12](docs/12-extraction-mode.md). |
+| `vault-assault` | 3v3 asymmetric vault defense with player bots retained and ambient NPCs removed. See [docs/15](docs/15-vault-assault.md). |
 | `native-spectator-stage2` | Death-spectator + freecam. Join as a normal player, deploy, die; then `trigger-stage2` for freecam. |
 | `scoring` | Per-player ranked MP scoring. See [docs/13](docs/13-ranked-scoring.md). |
 | `vanilla` | Stock gameplay. Mods off, normal map rotation, public. |
@@ -187,7 +188,7 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
 | Mod | Purpose |
 |---|---|
 | `DIConfig` | Applies lobby wait, intro duration, and the spectator-slot cap from `DIConfig.ini`. |
-| `DIExtraction` | The carrier-extraction mode: phase advance, loadout, disguise, teleport. |
+| `DIExtraction` | Carrier-extraction and 3v3 vault-assault modes: phase control, loadout, roles, timers, teleport. |
 | `DINativeStage2` | Drives the death-spectator freecam route. |
 | `DINativeLifecycle` | Read-only lifecycle observer; part of the verified spectator profile. |
 | `DIScore` | Read-only ranked MP scoring from the game's own XP event counters. |
@@ -209,6 +210,13 @@ saves a timestamped copy into `baseline/` first, so nothing is lost.
 | [docs/09-native-stage0.md](docs/09-native-stage0.md) | Reproducible native workspace, hashes, safety boundary, and rollback |
 | [docs/10-native-stage1.md](docs/10-native-stage1.md) | Diagnostic hooks, dependencies, evidence workflow, and rollback |
 | [docs/11-native-stage2.md](docs/11-native-stage2.md) | Historical Stage 2 route log and rollback; not a finished feature |
+| [docs/12-extraction-mode.md](docs/12-extraction-mode.md) | Carrier extraction and the shared server-side objective primitives |
+| [docs/15-vault-assault.md](docs/15-vault-assault.md) | 3v3 vault-assault prototype, rules, configuration, and test checklist |
+
+The `vault-assault` profile is persistent: after the shipping server exits at
+the result screen—or when the final human leaves an active match—its local
+supervisor starts a fresh lobby automatically. Use `python dimod.py stop` to
+stop both processes.
 
 ---
 
