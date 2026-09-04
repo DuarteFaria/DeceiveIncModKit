@@ -380,26 +380,70 @@ local function find_live_spies()
     return result
 end
 
--- Keep suspicion disabled without installing a high-frequency native hook.
--- This runs with the existing once-per-second vault-assault tick, but writes
--- only when a game-owned path has changed one of the two flags. ForceNetUpdate
--- is likewise limited to an actual replicated Spy state correction.
+-- Keep the whole stamina-backed suspicion system disabled without installing a
+-- high-frequency native hook. bIsSuspicious is only the system's OUTPUT; the
+-- first live test proved that clearing it alone lets the stock stamina tick set
+-- it again. Disable the NPC check, zero both drain controls, keep stamina full,
+-- and retain the interacter guard that stops bot-suspicion interaction events.
 local function suppress_suspicion_for_spy(pawn)
     local changed = false
     local failures = {}
-    local suspicious
-    local read_suspicious = pcall(function()
-        suspicious = unwrap(pawn.bIsSuspicious)
+    local before = {}
+    local read_core = pcall(function()
+        before.npc_check = unwrap(pawn.SusEnableNPCCheck)
+        before.suspicious = unwrap(pawn.bIsSuspicious)
+        before.stamina = unwrap(pawn.StaminaCurrent)
+        before.stamina_max = unwrap(pawn.StaminaMax)
+        before.drain = unwrap(pawn.StaminaDrainRate)
+        before.drain_multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
     end)
-    if not read_suspicious then
-        failures[#failures + 1] = "bIsSuspicious unreadable"
-    elseif suspicious ~= false then
-        local ok, err = pcall(function() pawn.bIsSuspicious = false end)
-        if ok then
+    if not read_core then
+        failures[#failures + 1] = "core suspicion properties unreadable"
+    else
+        local core_ok, core_err = pcall(function()
+            if before.npc_check ~= false then
+                pawn.SusEnableNPCCheck = false
+                changed = true
+            end
+            if before.suspicious ~= false then
+                pawn.bIsSuspicious = false
+                changed = true
+            end
+            if before.drain ~= 0 then
+                pawn.StaminaDrainRate = 0.0
+                changed = true
+            end
+            if before.drain_multiplier ~= 0 then
+                pawn.StaminaDrainRateMultiplier = 0.0
+                changed = true
+            end
+        end)
+        if not core_ok then
+            failures[#failures + 1] = "core suspicion write: " ..
+                                      describe_error(core_err)
+        end
+
+        if type(before.stamina_max) ~= "number" then
+            failures[#failures + 1] = "StaminaMax unreadable"
+        elseif type(before.stamina) ~= "number" or
+               before.stamina < before.stamina_max then
+            -- Use the game's own setter first so its stamina delegate and
+            -- replication path run. The direct assignment is a safe fallback
+            -- for shipping builds that compile the helper into a no-op.
+            local reset_ok = pcall(function() pawn:ResetStaminaToMax() end)
+            local reset_value
+            pcall(function() reset_value = unwrap(pawn.StaminaCurrent) end)
+            if not reset_ok or type(reset_value) ~= "number" or
+               reset_value < before.stamina_max then
+                local direct_ok, direct_err = pcall(function()
+                    pawn.StaminaCurrent = before.stamina_max
+                end)
+                if not direct_ok then
+                    failures[#failures + 1] = "StaminaCurrent write: " ..
+                                              describe_error(direct_err)
+                end
+            end
             changed = true
-        else
-            failures[#failures + 1] = "bIsSuspicious write: " ..
-                                      describe_error(err)
         end
     end
 
@@ -429,23 +473,57 @@ local function suppress_suspicion_for_spy(pawn)
         end
     end
 
-    local suspicious_after, trigger_after
-    local verify_suspicious = pcall(function()
-        suspicious_after = unwrap(pawn.bIsSuspicious)
+    local after = {}
+    local verify_core = pcall(function()
+        after.npc_check = unwrap(pawn.SusEnableNPCCheck)
+        after.suspicious = unwrap(pawn.bIsSuspicious)
+        after.stamina = unwrap(pawn.StaminaCurrent)
+        after.stamina_max = unwrap(pawn.StaminaMax)
+        after.drain = unwrap(pawn.StaminaDrainRate)
+        after.drain_multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
     end)
     local verify_trigger = interacter ~= nil and is_live(interacter) and
         pcall(function()
-            trigger_after = unwrap(interacter.bCanTriggerBotSuspiciousness)
+            after.can_trigger = unwrap(
+                interacter.bCanTriggerBotSuspiciousness)
         end)
-    if not verify_suspicious or suspicious_after ~= false then
-        failures[#failures + 1] = "bIsSuspicious did not read back false"
+    if not verify_core then
+        failures[#failures + 1] = "core suspicion read-back failed"
+    else
+        if after.npc_check ~= false then
+            failures[#failures + 1] =
+                "SusEnableNPCCheck did not read back false"
+        end
+        if after.suspicious ~= false then
+            failures[#failures + 1] = "bIsSuspicious did not read back false"
+        end
+        if after.drain ~= 0 then
+            failures[#failures + 1] =
+                "StaminaDrainRate did not read back zero"
+        end
+        if after.drain_multiplier ~= 0 then
+            failures[#failures + 1] =
+                "StaminaDrainRateMultiplier did not read back zero"
+        end
+        if type(after.stamina) ~= "number" or
+           type(after.stamina_max) ~= "number" or
+           after.stamina < after.stamina_max then
+            failures[#failures + 1] = "stamina did not read back full"
+        end
     end
-    if not verify_trigger or trigger_after ~= false then
+    if not verify_trigger or after.can_trigger ~= false then
         failures[#failures + 1] =
             "bCanTriggerBotSuspiciousness did not read back false"
     end
     if changed then pcall(function() pawn:ForceNetUpdate() end) end
-    return #failures == 0, table.concat(failures, "; "), changed
+    local detail = "npc_check=" .. tostring(after.npc_check) ..
+                   " suspicious=" .. tostring(after.suspicious) ..
+                   " stamina=" .. tostring(after.stamina) .. "/" ..
+                   tostring(after.stamina_max) ..
+                   " drain=" .. tostring(after.drain) ..
+                   " multiplier=" .. tostring(after.drain_multiplier) ..
+                   " interaction_trigger=" .. tostring(after.can_trigger)
+    return #failures == 0, table.concat(failures, "; "), changed, detail
 end
 
 local function suppress_assault_suspicion(spies)
@@ -453,15 +531,16 @@ local function suppress_assault_suspicion(spies)
     for _, pawn in ipairs(spies) do
         local key = full(player_state_of_spy(pawn))
         if key == "<nil>" or key == "<unrenderable>" then key = full(pawn) end
-        local ok, why, changed = suppress_suspicion_for_spy(pawn)
+        local ok, why, changed, detail = suppress_suspicion_for_spy(pawn)
         if ok then
             assault_suspicion_last_error[key] = nil
             if not assault_suspicion_prepared[key] then
                 assault_suspicion_prepared[key] = true
                 append("suspicion disabled and verified: " .. spy_name(pawn) ..
-                       " bot=" .. tostring(is_bot_spy(pawn)))
+                       " bot=" .. tostring(is_bot_spy(pawn)) .. " " .. detail)
             elseif changed then
-                append("suspicion state re-cleared: " .. spy_name(pawn))
+                append("suspicion controls restored: " .. spy_name(pawn) ..
+                       " " .. detail)
             end
         elseif assault_suspicion_last_error[key] ~= why then
             assault_suspicion_last_error[key] = why

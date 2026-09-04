@@ -78,11 +78,17 @@ class VaultAssaultSourceTests(unittest.TestCase):
         stop = self.source.index("local function find_live_player_states", start)
         suppression = self.source[start:stop]
 
+        self.assertIn("pawn.SusEnableNPCCheck = false", suppression)
         self.assertIn("pawn.bIsSuspicious = false", suppression)
+        self.assertIn("pawn.StaminaDrainRate = 0.0", suppression)
+        self.assertIn("pawn.StaminaDrainRateMultiplier = 0.0", suppression)
+        self.assertIn("pawn:ResetStaminaToMax()", suppression)
         self.assertIn("interacter.bCanTriggerBotSuspiciousness = false",
                       suppression)
-        self.assertIn("suspicious_after ~= false", suppression)
-        self.assertIn("trigger_after ~= false", suppression)
+        self.assertIn("after.npc_check ~= false", suppression)
+        self.assertIn("after.suspicious ~= false", suppression)
+        self.assertIn("after.drain_multiplier ~= 0", suppression)
+        self.assertIn("after.can_trigger ~= false", suppression)
         self.assertNotIn("CheatToggleSpySuspiciousSystem", self.source)
 
     def test_suspicion_is_maintained_on_existing_tick(self):
