@@ -44,13 +44,17 @@ process, and reinjects UE4SS automatically. There is a brief reconnect window;
   equipped-gadget charges, and upgrade-chip resources. Player bots retain their
   stock loadouts because bulk grants during bot initialization can trigger a
   status-3 shutdown. Friendly fire is explicitly disabled.
-- Wandering ambient NPC actors have their AI behavior stacks stopped and are
-  hidden as they spawn. The five player-bot agents are retained and continue to
-  occupy the remaining Trio slots.
+- Ambient spawn-data and live manager counts are forced to zero during map load.
+  Any NPCs that win that startup race have their AI stopped and are hidden; guard
+  hitscan and melee damage is also zeroed so a queued shot cannot come from an
+  invisible actor. The five player-bot agents remain in the Trio slots.
 - When `DisableSuspicion=1`, every live agent (human or bot) has the underlying
   stamina drain and NPC suspicion checks disabled, stamina kept full, and any
-  suspicious state cleared by the existing once-per-second mode tick. All
-  reflected controls are read back before the agent is logged as ready.
+  suspicious state cleared by the existing once-per-second mode tick. The
+  replicated undercover flag is also cleared with `DisableCover=1`. Stale intro
+  invulnerability and disguise-shield modifiers are removed after deployment so
+  bots and humans use the same damage path. All reflected controls are read back
+  before the agent is logged as ready.
 - Attackers have 120 seconds to pick up the briefcase. Their first valid pickup
   replaces the clock with a single 60-second extraction deadline. That deadline
   continues if the case is dropped and is carried across stock extraction phase
@@ -96,7 +100,7 @@ The two `[Gameplay]` settings are owned by `DIConfig` and apply to every game
 mode, not only vault assault. `DisableCover=1` also suppresses DIExtraction's
 forced-disguise option so the two systems cannot fight each other. Both are
 available under **Gameplay rules** in the profile editor. The cover rule uses
-replicated scalar state and deliberately does not invoke the stock
+replicated scalar/undercover state and deliberately does not invoke the stock
 `AllowCover(false)` transition, which exits the dedicated server at deployment.
 
 ## First live-test checklist
@@ -137,6 +141,9 @@ replicated scalar state and deliberately does not invoke the stock
   before joining the rotation.
 - Full loadout means all server-owned in-match resources. It cannot equip a
   weapon or gadget the player did not select before deployment.
+- The server can keep suspicion inactive and replicate an exposed state, but it
+  cannot remove the cover/suspicion widget asset from an unmodified game client.
+  Physically deleting that HUD element requires a small client-side mod.
 
 The original `extraction` profile remains unchanged and defaults to
 `Mode = carrier_extraction` when no mode is specified.

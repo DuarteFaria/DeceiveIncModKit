@@ -406,11 +406,6 @@ local function stop_npc_component(component)
     end)
     if not tick_stopped then return false, describe_error(tick_err) end
 
-    -- Deactivation is best effort. Some map-created behavior wrappers reject
-    -- this otherwise-standard ActorComponent call, but disabling and verifying
-    -- their component tick is the authoritative part of quarantine.
-    pcall(function() component:Deactivate() end)
-
     local tick_enabled
     local verified, verify_err = pcall(function()
         tick_enabled = unwrap(component:IsComponentTickEnabled())
@@ -418,6 +413,139 @@ local function stop_npc_component(component)
     if not verified then return false, describe_error(verify_err) end
     if tick_enabled ~= false then return false, "component remained ticking" end
     return true, nil
+end
+
+-- A guard's gun is a separate AHitscanWeapon actor. Disabling the guard
+-- component/AI tick does not cancel fire callbacks that were already queued,
+-- which is why a hidden BP_Amber could still damage players. Make every guard
+-- attack harmless at both the encounter and weapon layers. Keep the weapon
+-- actor alive: destroying manager-owned objects during world cleanup has proven
+-- unsafe on the dedicated server.
+local function neutralize_npc_guard_component(component)
+    if component == nil or not is_live(component) then return true, false, nil end
+
+    local weapon
+    local is_guard = pcall(function() weapon = unwrap(component.Weapon) end)
+    if not is_guard then return true, false, nil end
+
+    local guard_ok, guard_err = pcall(function()
+        component.bInvestigatingSpy = false
+        component.bInvestigatingDanger = false
+        component.bLookingAtAggroTarget = false
+        component.ReplicatedAggroTargetActor = nil
+        component.EncounterShootRange = 0.0
+        component.EncounterMeleeRange = 0.0
+        component.EncounterMeleeDamage = 0.0
+        component.EncounterMeleeHitMaxRange = 0.0
+    end)
+    if not guard_ok then return false, false, describe_error(guard_err) end
+
+    if weapon == nil or not is_live(weapon) then return true, false, nil end
+    local weapon_ok, weapon_err = pcall(function()
+        -- These are the native AHitscanWeapon damage fields used by ambient
+        -- guards. Zeroing all hit variants also covers a shot already queued.
+        weapon.Damage = 0.0
+        weapon.CriticalDamage = 0.0
+        weapon.LimbDamage = 0.0
+        weapon.EffectiveRange = 0.0
+        weapon:PrimaryEnd()
+        weapon:SetActorTickEnabled(false)
+        weapon:ForceNetUpdate()
+    end)
+    if not weapon_ok then return false, false, describe_error(weapon_err) end
+
+    local damage, critical, limb
+    local verify_ok, verify_err = pcall(function()
+        damage = unwrap(weapon.Damage)
+        critical = unwrap(weapon.CriticalDamage)
+        limb = unwrap(weapon.LimbDamage)
+    end)
+    if not verify_ok then return false, false, describe_error(verify_err) end
+    if damage ~= 0 or critical ~= 0 or limb ~= 0 then
+        return false, false, "guard weapon damage remained non-zero"
+    end
+    return true, true, nil
+end
+
+local function neutralize_ambient_npc_weapons(npc)
+    local ai
+    local read_ok, read_err = pcall(function() ai = unwrap(npc.NPCAI) end)
+    if not read_ok then return false, 0, describe_error(read_err) end
+    if ai == nil or not is_live(ai) then return true, 0, nil end
+
+    local additional
+    pcall(function() additional = ai.AdditionalComponents end)
+    if additional == nil then return true, 0, nil end
+
+    local count = 0
+    pcall(function() count = #additional end)
+    local weapons = 0
+    for i = 1, count do
+        local component
+        pcall(function() component = unwrap(additional[i]) end)
+        local ok, found, err = neutralize_npc_guard_component(component)
+        if not ok then
+            return false, weapons, "AdditionalComponents[" .. tostring(i) ..
+                   "]: " .. tostring(err)
+        end
+        if found then weapons = weapons + 1 end
+    end
+    return true, weapons, nil
+end
+
+-- Stop the ambient population at its source. SpawnCount is copied from the
+-- selected data asset into PopulationManager, so write both the live manager
+-- struct and its per-match data instance. The quarantine below remains as a
+-- fallback for NPCs that won the startup race.
+local function disable_ambient_npc_spawning(managers)
+    local changed = 0
+    for i = 1, #managers do
+        local manager = managers[i]
+        if is_live(manager) then
+            pcall(function()
+                if unwrap(manager.SpawnNPCLevelData.SpawnCount) ~= 0 then
+                    manager.SpawnNPCLevelData.SpawnCount = 0
+                    changed = changed + 1
+                end
+            end)
+            local instance
+            pcall(function() instance = unwrap(manager.InstanceNPCSpawnData) end)
+            if instance and is_live(instance) then
+                pcall(function()
+                    if unwrap(instance.SpawnNPCLevelData.SpawnCount) ~= 0 then
+                        instance.SpawnNPCLevelData.SpawnCount = 0
+                        changed = changed + 1
+                    end
+                    instance.NPCsEnteringVaultCount = 0
+                end)
+            end
+        end
+    end
+    return changed
+end
+
+local function disable_ambient_npc_spawn_assets()
+    local assets
+    local find_ok, find_err = pcall(function()
+        assets = FindAllOf("DIPopulationManagerNpcSpawnDataAsset")
+    end)
+    if not find_ok then return 0, describe_error(find_err) end
+    if assets == nil then return 0, nil end
+
+    local changed = 0
+    for i = 1, #assets do
+        local asset = assets[i]
+        if is_live(asset) then
+            pcall(function()
+                if unwrap(asset.SpawnNPCLevelData.SpawnCount) ~= 0 then
+                    asset.SpawnNPCLevelData.SpawnCount = 0
+                    changed = changed + 1
+                end
+                asset.NPCsEnteringVaultCount = 0
+            end)
+        end
+    end
+    return changed, nil
 end
 
 local function stop_ambient_npc_ai(npc)
@@ -471,6 +599,14 @@ end
 
 local function remove_ambient_npcs_tick()
     if not remove_ambient_npcs then return end
+    local asset_changes, asset_error = disable_ambient_npc_spawn_assets()
+    if asset_error ~= nil and asset_error ~= assault_npc_cleanup_error then
+        assault_npc_cleanup_error = asset_error
+        append("ambient NPC spawn-data lookup failed: " .. asset_error)
+    elseif asset_changes > 0 then
+        append("ambient NPC spawning disabled in " .. asset_changes ..
+               " loaded spawn data asset(s)")
+    end
     local managers
     local find_ok, find_err = pcall(function()
         managers = FindAllOf("PopulationManager")
@@ -484,6 +620,12 @@ local function remove_ambient_npcs_tick()
         return
     end
     if not managers then return end
+
+    local spawn_limits_changed = disable_ambient_npc_spawning(managers)
+    if spawn_limits_changed > 0 then
+        append("ambient NPC spawning disabled at " .. spawn_limits_changed ..
+               " live population source(s)")
+    end
 
     -- Snapshot the manager-owned population before mutating actor state.
     local targets = {}
@@ -512,11 +654,21 @@ local function remove_ambient_npcs_tick()
     end
 
     local removed = 0
+    local neutralized_weapons = 0
     local failed = 0
     local first_error = nil
     for i = 1, #targets do
         local npc = targets[i]
         local key = full(npc)
+        -- Recheck even after quarantine: a guard weapon can be created by a
+        -- delayed callback after the NPC itself was hidden.
+        local weapon_ok, weapon_count, weapon_err =
+            neutralize_ambient_npc_weapons(npc)
+        neutralized_weapons = neutralized_weapons + weapon_count
+        if not weapon_ok then
+            failed = failed + 1
+            first_error = first_error or weapon_err
+        end
         if is_live(npc) and not assault_quarantined_npcs[key] then
             local ai_ok, ai_err = stop_ambient_npc_ai(npc)
             local hide_ok, hide_err = false, nil
@@ -535,7 +687,7 @@ local function remove_ambient_npcs_tick()
                 end)
                 net_ok, net_err = pcall(function() npc:ForceNetUpdate() end)
             end
-            if ai_ok and hide_ok and collision_ok and tick_ok and net_ok then
+            if weapon_ok and ai_ok and hide_ok and collision_ok and tick_ok and net_ok then
                 assault_quarantined_npcs[key] = true
                 removed = removed + 1
             else
@@ -551,6 +703,9 @@ local function remove_ambient_npcs_tick()
         append("ambient NPC cleanup: AI-stopped/quarantined=" .. removed ..
                " total=" .. assault_ambient_npcs_removed ..
                " (Spy agents and player bots untouched)")
+    end
+    if neutralized_weapons > 0 and removed > 0 then
+        append("ambient guard weapons neutralized=" .. neutralized_weapons)
     end
     if failed > 0 then
         local message = tostring(failed) .. " actor(s): " .. tostring(first_error)
@@ -2358,6 +2513,19 @@ local function load_config()
 end
 
 pcall(load_config)
+
+-- UE4SS loads this module on LVL_StartupServer, before travel to the operation
+-- map. Mutate the already-loaded spawn data here so PopulationManager copies a
+-- zero count during its BeginPlay instead of racing the one-second game loop.
+if armed and extraction_mode == "vault_assault" and remove_ambient_npcs then
+    local changed, err = disable_ambient_npc_spawn_assets()
+    if err ~= nil then
+        append("early ambient NPC spawn-data override failed: " .. tostring(err))
+    else
+        append("early ambient NPC spawn-data override: changed=" ..
+               tostring(changed))
+    end
+end
 
 -- Do not RegisterHook the global interaction/condition UFunctions here. They
 -- execute at very high frequency during intro and traversing UObject state from

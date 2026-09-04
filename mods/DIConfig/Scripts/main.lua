@@ -116,10 +116,10 @@ local function active_match()
             end
             -- VAULT_LOCKED through EXTRACTION_ARRIVED. These phases are shared
             -- by the stock Solo, Duo, and Trio flows.
-            if phase and phase >= 3 and phase <= 6 then return true end
+            if phase and phase >= 3 and phase <= 6 then return true, state end
         end
     end
-    return false
+    return false, nil
 end
 
 local disable_suspicion = false
@@ -137,6 +137,8 @@ local function suppress_suspicion(pawn)
         before.stamina_max = unwrap(pawn.StaminaMax)
         before.drain = unwrap(pawn.StaminaDrainRate)
         before.multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
+        before.no_out_of_cover_tick = unwrap(pawn.bNoStamTickOutOfCover)
+        before.only_undercover = unwrap(pawn.bSusOnlyDrainUndercover)
     end)
     if not read_ok or type(before.stamina_max) ~= "number" then
         return false, "suspicion properties unavailable", changed, ""
@@ -157,6 +159,14 @@ local function suppress_suspicion(pawn)
         end
         if before.multiplier ~= 0 then
             pawn.StaminaDrainRateMultiplier = 0.0
+            changed = true
+        end
+        if before.no_out_of_cover_tick ~= true then
+            pawn.bNoStamTickOutOfCover = true
+            changed = true
+        end
+        if before.only_undercover ~= true then
+            pawn.bSusOnlyDrainUndercover = true
             changed = true
         end
     end)
@@ -200,6 +210,8 @@ local function suppress_suspicion(pawn)
         after.stamina_max = unwrap(pawn.StaminaMax)
         after.drain = unwrap(pawn.StaminaDrainRate)
         after.multiplier = unwrap(pawn.StaminaDrainRateMultiplier)
+        after.no_out_of_cover_tick = unwrap(pawn.bNoStamTickOutOfCover)
+        after.only_undercover = unwrap(pawn.bSusOnlyDrainUndercover)
         if interacter then
             after.can_trigger =
                 unwrap(interacter.bCanTriggerBotSuspiciousness)
@@ -207,7 +219,8 @@ local function suppress_suspicion(pawn)
     end)
     local verified = verify_ok and after.npc_check == false and
         after.suspicious == false and after.drain == 0 and
-        after.multiplier == 0 and after.can_trigger == false and
+        after.multiplier == 0 and after.no_out_of_cover_tick == true and
+        after.only_undercover == true and after.can_trigger == false and
         type(after.stamina) == "number" and
         type(after.stamina_max) == "number" and
         after.stamina >= after.stamina_max
@@ -220,15 +233,66 @@ local function suppress_suspicion(pawn)
            detail
 end
 
-local function suppress_cover(pawn)
+local function remove_combat_spawn_protection(pawn, game_state)
+    local health
+    pcall(function() health = unwrap(pawn.HealthComponent) end)
+    if health == nil then return false, "health component unavailable" end
+
+    local changed = false
+    local ok, err = pcall(function()
+        if unwrap(health.bIgnoreDamage) == true then
+            health.bIgnoreDamage = false
+            changed = true
+        end
+
+        -- The stock intro phase owns this exact modifier. If phase advancement
+        -- or bot possession leaves it attached, a deployed agent can appear
+        -- unhittable for several seconds.
+        local match_modifier
+        if game_state ~= nil then
+            match_modifier = unwrap(game_state.InvulnerabilityInstance)
+        end
+        if match_modifier ~= nil then
+            health:RemoveDamageModifier(match_modifier)
+        end
+
+        -- DisableCover means disguise shielding is not part of this ruleset.
+        -- Remove only the two modifiers owned by the pawn's disguise component;
+        -- agent ability and chip modifiers remain untouched.
+        local shield = unwrap(pawn.DisguiseShieldComponent)
+        if shield ~= nil then
+            shield.DamageReductionDuration = 0.0
+            local disguised = unwrap(shield.ShieldDisguiseDamageModifierInstance)
+            local exposed = unwrap(shield.ShieldDamageModifierInstance)
+            if disguised ~= nil then health:RemoveDamageModifier(disguised) end
+            if exposed ~= nil then health:RemoveDamageModifier(exposed) end
+        end
+    end)
+    if not ok then
+        return false, "damage protection cleanup failed: " .. tostring(err)
+    end
+
+    local ignored
+    local verified = pcall(function() ignored = unwrap(health.bIgnoreDamage) end)
+    if not verified or ignored ~= false then
+        return false, "damage protection read-back failed"
+    end
+    return true, nil, changed
+end
+
+local function suppress_cover(pawn, game_state)
     local before = {}
     local read_ok = pcall(function()
         before.disabled = unwrap(pawn.bCheatDisableCover)
         before.ratio = unwrap(pawn.CoverRatio)
+        before.undercover = unwrap(
+            pawn.UndercoverReplicationData.bShouldBeUndercover)
+        before.undercover_flags = unwrap(pawn.UndercoverReplicationData.Flags)
     end)
     if not read_ok then return false, "cover properties unavailable", false, "" end
 
-    local changed = before.disabled ~= true or before.ratio ~= 0
+    local changed = before.disabled ~= true or before.ratio ~= 0 or
+                    before.undercover ~= false or before.undercover_flags ~= 0
     if changed then
         -- Do not call AllowCover(false) here. On the dedicated server that
         -- native transition calls BlowCover and immediately requests process
@@ -237,6 +301,8 @@ local function suppress_cover(pawn)
         local write_ok, write_error = pcall(function()
             pawn.bCheatDisableCover = true
             pawn.CoverRatio = 0.0
+            pawn.UndercoverReplicationData.bShouldBeUndercover = false
+            pawn.UndercoverReplicationData.Flags = 0
         end)
         if not write_ok then
             return false, "cover write failed: " .. tostring(write_error),
@@ -248,18 +314,33 @@ local function suppress_cover(pawn)
     local verify_ok = pcall(function()
         after.disabled = unwrap(pawn.bCheatDisableCover)
         after.ratio = unwrap(pawn.CoverRatio)
+        after.undercover = unwrap(
+            pawn.UndercoverReplicationData.bShouldBeUndercover)
+        after.undercover_flags = unwrap(pawn.UndercoverReplicationData.Flags)
     end)
     local verified = verify_ok and after.disabled == true and
-                     after.ratio == 0
-    local detail = string.format("cover[disabled=%s ratio=%s]",
-        tostring(after.disabled), tostring(after.ratio))
+                     after.ratio == 0 and after.undercover == false and
+                     after.undercover_flags == 0
+    local detail = string.format(
+        "cover[disabled=%s ratio=%s undercover=%s flags=%s]",
+        tostring(after.disabled), tostring(after.ratio),
+        tostring(after.undercover), tostring(after.undercover_flags))
+    if verified then
+        local vulnerable, vulnerability_error, vulnerability_changed =
+            remove_combat_spawn_protection(pawn, game_state)
+        changed = changed or vulnerability_changed
+        if not vulnerable then
+            return false, vulnerability_error, changed, detail
+        end
+    end
     return verified, verified and nil or "cover read-back failed", changed,
            detail
 end
 
 local function apply_gameplay()
     if not disable_suspicion and not disable_cover then return end
-    if not active_match() then return end
+    local is_active, game_state = active_match()
+    if not is_active then return end
     for _, pawn in ipairs(live_spies()) do
         local key = full(pawn)
         local ok, changed, reasons, details = true, false, {}, {}
@@ -270,7 +351,7 @@ local function apply_gameplay()
             details[#details + 1] = detail
         end
         if disable_cover then
-            local worked, why, altered, detail = suppress_cover(pawn)
+            local worked, why, altered, detail = suppress_cover(pawn, game_state)
             ok, changed = ok and worked, changed or altered
             if why then reasons[#reasons + 1] = why end
             details[#details + 1] = detail

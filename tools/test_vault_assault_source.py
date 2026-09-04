@@ -84,9 +84,29 @@ class VaultAssaultSourceTests(unittest.TestCase):
         self.assertIn("ai.AdditionalComponents", cleanup)
         self.assertIn("ai:SetActorTickEnabled(false)", cleanup)
         self.assertIn("component:SetComponentTickEnabled(false)", cleanup)
-        self.assertIn("component:Deactivate()", cleanup)
+        self.assertNotIn("component:Deactivate()", cleanup)
         self.assertIn("ai:IsActorTickEnabled()", cleanup)
         self.assertIn("component:IsComponentTickEnabled()", cleanup)
+
+    def test_ambient_spawn_source_and_guard_weapons_are_neutralized(self):
+        start = self.source.index("local function neutralize_npc_guard_component")
+        stop = self.source.index("local function reset_vault_assault_state", start)
+        cleanup = self.source[start:stop]
+        self.assertIn(
+            'FindAllOf("DIPopulationManagerNpcSpawnDataAsset")', cleanup)
+        self.assertIn("asset.SpawnNPCLevelData.SpawnCount = 0", cleanup)
+        self.assertIn("manager.SpawnNPCLevelData.SpawnCount = 0", cleanup)
+        self.assertIn("instance.SpawnNPCLevelData.SpawnCount = 0", cleanup)
+        self.assertIn("weapon.Damage = 0.0", cleanup)
+        self.assertIn("weapon.CriticalDamage = 0.0", cleanup)
+        self.assertIn("weapon.LimbDamage = 0.0", cleanup)
+        self.assertIn("component.EncounterMeleeDamage = 0.0", cleanup)
+        self.assertIn("weapon:PrimaryEnd()", cleanup)
+
+        config = self.source.index("pcall(load_config)")
+        early_override = self.source.index(
+            "disable_ambient_npc_spawn_assets()", config)
+        self.assertGreater(early_override, config)
 
     def test_ambient_cleanup_keeps_population_actors_registered(self):
         start = self.source.index("local function stop_npc_component")

@@ -23,26 +23,43 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
         self.assertIn("pawn.bIsSuspicious = false", suppression)
         self.assertIn("pawn.StaminaDrainRate = 0.0", suppression)
         self.assertIn("pawn.StaminaDrainRateMultiplier = 0.0", suppression)
+        self.assertIn("pawn.bNoStamTickOutOfCover = true", suppression)
+        self.assertIn("pawn.bSusOnlyDrainUndercover = true", suppression)
         self.assertIn("pawn:ResetStaminaToMax()", suppression)
         self.assertIn("interacter.bCanTriggerBotSuspiciousness = false",
                       suppression)
         self.assertIn("after.stamina >= after.stamina_max", suppression)
 
-    def test_cover_uses_only_crash_safe_scalar_state(self):
+    def test_cover_uses_crash_safe_replicated_state(self):
         start = self.source.index("local function suppress_cover")
         stop = self.source.index("local function apply_gameplay", start)
         suppression = self.source[start:stop]
 
         self.assertIn("pawn.bCheatDisableCover = true", suppression)
         self.assertIn("pawn.CoverRatio = 0.0", suppression)
+        self.assertIn(
+            "pawn.UndercoverReplicationData.bShouldBeUndercover = false",
+            suppression)
+        self.assertIn("pawn.UndercoverReplicationData.Flags = 0", suppression)
         self.assertNotIn(":AllowCover(", suppression)
         self.assertNotIn(":IsUndercover(", suppression)
         self.assertIn("after.disabled == true", suppression)
         self.assertIn("after.ratio == 0", suppression)
 
+    def test_disabled_cover_removes_only_stock_combat_protection(self):
+        start = self.source.index("local function remove_combat_spawn_protection")
+        stop = self.source.index("local function suppress_cover", start)
+        cleanup = self.source[start:stop]
+        self.assertIn("health.bIgnoreDamage = false", cleanup)
+        self.assertIn("game_state.InvulnerabilityInstance", cleanup)
+        self.assertIn("ShieldDisguiseDamageModifierInstance", cleanup)
+        self.assertIn("ShieldDamageModifierInstance", cleanup)
+        self.assertIn("health:RemoveDamageModifier", cleanup)
+
     def test_gameplay_rules_run_for_all_active_match_spies(self):
         self.assertIn('FindAllOf("Spy")', self.source)
-        self.assertIn("if not active_match() then return end", self.source)
+        self.assertIn("local is_active, game_state = active_match()", self.source)
+        self.assertIn("if not is_active then return end", self.source)
         self.assertIn("LoopAsync(1000, function()", self.source)
         self.assertIn("pcall(apply_gameplay)", self.source)
 

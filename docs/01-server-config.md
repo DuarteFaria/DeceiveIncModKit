@@ -153,8 +153,10 @@ took effect.
 ## Not configurable here
 
 Lobby wait time, room item spawns, NPC population, gamblebox rates, suspicion
-system. None have an ini key. Lobby wait time is solved via UE4SS — see
-docs/05. Command-line `-CommunityBalanceProfile=<path>` also exists.
+system. None have a native Tripwire ini key. Lobby wait time and the prototype
+gameplay rules are solved via UE4SS; vault assault also suppresses the ambient
+population through its spawn data and live population manager. See docs/05 and
+docs/15. Command-line `-CommunityBalanceProfile=<path>` also exists.
 
 The mod kit's `DIConfig.ini` is a separate UE4SS configuration surface. Its
 general gameplay section can disable cover and suspicion for any stock mode:
@@ -167,6 +169,8 @@ DisableCover = 1
 
 These are shown under **Gameplay rules** in the profile editor and require the
 core `DIConfig` module. They are not native `TripwireServer.ini` keys. Cover is
-suppressed through the replicated scalar fields only; the stock `AllowCover`
+suppressed through replicated scalar and undercover-state fields; the stock
+`AllowCover`
 transition is unsafe on the dedicated server because it exits the process when
-the match begins.
+the match begins. This controls gameplay but cannot delete the HUD widget from an
+unmodified client.
