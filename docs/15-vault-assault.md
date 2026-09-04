@@ -89,7 +89,9 @@ Omitting both faction ids makes the mod select the two lowest live faction ids.
 The two `[Gameplay]` settings are owned by `DIConfig` and apply to every game
 mode, not only vault assault. `DisableCover=1` also suppresses DIExtraction's
 forced-disguise option so the two systems cannot fight each other. Both are
-available under **Gameplay rules** in the profile editor.
+available under **Gameplay rules** in the profile editor. The cover rule uses
+replicated scalar state and deliberately does not invoke the stock
+`AllowCover(false)` transition, which exits the dedicated server at deployment.
 
 ## First live-test checklist
 

@@ -166,4 +166,7 @@ DisableCover = 1
 ```
 
 These are shown under **Gameplay rules** in the profile editor and require the
-core `DIConfig` module. They are not native `TripwireServer.ini` keys.
+core `DIConfig` module. They are not native `TripwireServer.ini` keys. Cover is
+suppressed through the replicated scalar fields only; the stock `AllowCover`
+transition is unsafe on the dedicated server because it exits the process when
+the match begins.

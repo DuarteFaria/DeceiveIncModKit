@@ -225,18 +225,15 @@ local function suppress_cover(pawn)
     local read_ok = pcall(function()
         before.disabled = unwrap(pawn.bCheatDisableCover)
         before.ratio = unwrap(pawn.CoverRatio)
-        before.undercover = unwrap(pawn:IsUndercover())
     end)
     if not read_ok then return false, "cover properties unavailable", false, "" end
 
-    local changed = before.disabled ~= true or before.ratio ~= 0 or
-                    before.undercover ~= false
+    local changed = before.disabled ~= true or before.ratio ~= 0
     if changed then
-        local allow_ok, allow_error = pcall(function() pawn:AllowCover(false) end)
-        if not allow_ok then
-            return false, "AllowCover(false) failed: " .. tostring(allow_error),
-                   changed, ""
-        end
+        -- Do not call AllowCover(false) here. On the dedicated server that
+        -- native transition calls BlowCover and immediately requests process
+        -- exit when deployment begins. IsUndercover() is avoided for the same
+        -- reason: scalar reflected fields are the crash-safe server surface.
         local write_ok, write_error = pcall(function()
             pawn.bCheatDisableCover = true
             pawn.CoverRatio = 0.0
@@ -251,13 +248,11 @@ local function suppress_cover(pawn)
     local verify_ok = pcall(function()
         after.disabled = unwrap(pawn.bCheatDisableCover)
         after.ratio = unwrap(pawn.CoverRatio)
-        after.undercover = unwrap(pawn:IsUndercover())
     end)
     local verified = verify_ok and after.disabled == true and
-                     after.ratio == 0 and after.undercover == false
-    local detail = string.format("cover[disabled=%s ratio=%s undercover=%s]",
-        tostring(after.disabled), tostring(after.ratio),
-        tostring(after.undercover))
+                     after.ratio == 0
+    local detail = string.format("cover[disabled=%s ratio=%s]",
+        tostring(after.disabled), tostring(after.ratio))
     return verified, verified and nil or "cover read-back failed", changed,
            detail
 end

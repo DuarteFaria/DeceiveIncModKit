@@ -28,15 +28,17 @@ class DIConfigGameplaySourceTests(unittest.TestCase):
                       suppression)
         self.assertIn("after.stamina >= after.stamina_max", suppression)
 
-    def test_cover_uses_stock_setter_and_verified_state(self):
+    def test_cover_uses_only_crash_safe_scalar_state(self):
         start = self.source.index("local function suppress_cover")
         stop = self.source.index("local function apply_gameplay", start)
         suppression = self.source[start:stop]
 
-        self.assertIn("pawn:AllowCover(false)", suppression)
         self.assertIn("pawn.bCheatDisableCover = true", suppression)
         self.assertIn("pawn.CoverRatio = 0.0", suppression)
-        self.assertIn("after.undercover == false", suppression)
+        self.assertNotIn(":AllowCover(", suppression)
+        self.assertNotIn(":IsUndercover(", suppression)
+        self.assertIn("after.disabled == true", suppression)
+        self.assertIn("after.ratio == 0", suppression)
 
     def test_gameplay_rules_run_for_all_active_match_spies(self):
         self.assertIn('FindAllOf("Spy")', self.source)
