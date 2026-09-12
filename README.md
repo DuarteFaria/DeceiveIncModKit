@@ -7,6 +7,12 @@ The kit lives **outside** the game folder on purpose — a Steam update wipes
 anything inside `steamapps\common`. Nothing here is authored in the game
 directory; `dimod.py apply` deploys into it, `dimod.py vanilla` takes it back out.
 
+**WARNING**
+
+This is a research-only project used as a playground to learn about modding as someone who has never touched game dev before.
+A lot of LLMs were used to help me pave my way, so I'm aware that the quality produced is not good at all.
+My main goal was to test if modding was possible, what was possible to do, and have fun along the way.
+
 ---
 
 ## First run on a new machine
@@ -49,6 +55,9 @@ directly rather than assuming.
 ---
 
 ## Quick start — GUI
+
+<img width="1390" height="839" alt="image" src="https://github.com/user-attachments/assets/578cd9f9-47a3-4175-bd3b-4d5285a1ca93" />
+
 
 Double-click **`Mod Kit.bat`**, or:
 
